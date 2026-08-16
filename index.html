@@ -1,0 +1,988 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radar de Mercados — ETFs, Sectores y Señales</title>
+<style>
+:root{
+  --bg:#0b0f14; --bg2:#111823; --bg3:#161f2c; --line:#22304a;
+  --tx:#e6edf6; --tx2:#9fb0c7; --tx3:#6b7d95;
+  --up:#22c98a; --dn:#ff5c73; --neu:#7d8ea6;
+  --acc:#4da3ff; --warn:#ffb020; --hot:#ff7a45;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font-family:-apple-system,"Segoe UI",Inter,system-ui,sans-serif;font-size:14px;line-height:1.5}
+.wrap{max-width:1500px;margin:0 auto;padding:20px 22px 70px}
+a{color:var(--acc);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ---------- header ---------- */
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;
+  padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:22px}
+h1{margin:0;font-size:25px;letter-spacing:-.4px;font-weight:650}
+.sub{color:var(--tx2);font-size:13px;margin-top:5px}
+.hdr-r{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{font-family:inherit;font-size:13px;border-radius:8px;cursor:pointer;border:1px solid var(--line);
+  background:var(--bg3);color:var(--tx);padding:9px 15px;transition:.15s}
+button:hover{border-color:var(--acc);background:#1b2839}
+button.primary{background:var(--acc);border-color:var(--acc);color:#04121f;font-weight:600}
+button.primary:hover{background:#6bb4ff}
+button:disabled{opacity:.5;cursor:wait}
+#status{font-family:var(--mono);font-size:11.5px;color:var(--tx3)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--tx3);margin-right:6px;vertical-align:middle}
+.dot.live{background:var(--up);box-shadow:0 0 0 3px rgba(34,201,138,.15)}
+.dot.busy{background:var(--warn);animation:pulse 1s infinite}
+.dot.err{background:var(--dn)}
+@keyframes pulse{50%{opacity:.3}}
+
+/* ---------- layout ---------- */
+h2{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--tx3);
+  margin:34px 0 13px;font-weight:700;display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:17px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr}}
+@media(max-width:760px){.g2,.g4{grid-template-columns:1fr}}
+
+/* ---------- regime gauge ---------- */
+.regime{display:grid;grid-template-columns:250px 1fr;gap:22px;align-items:center}
+@media(max-width:860px){.regime{grid-template-columns:1fr}}
+.gauge{text-align:center}
+.gnum{font-family:var(--mono);font-size:60px;font-weight:700;line-height:1;letter-spacing:-2px}
+.glab{font-size:15px;font-weight:700;letter-spacing:.5px;margin-top:7px}
+.gsub{font-size:11.5px;color:var(--tx3);margin-top:3px}
+.bar{height:7px;border-radius:4px;background:var(--bg3);overflow:hidden;margin-top:12px}
+.bar>i{display:block;height:100%;border-radius:4px}
+.pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
+@media(max-width:760px){.pillars{grid-template-columns:1fr}}
+.pil{background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:11px 13px}
+.pil .t{font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--tx3);font-weight:700}
+.pil .v{font-family:var(--mono);font-size:19px;font-weight:700;margin:4px 0 2px}
+.pil .d{font-size:11.5px;color:var(--tx2);line-height:1.35}
+
+/* ---------- tables ---------- */
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg2)}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:940px}
+th{background:var(--bg3);color:var(--tx3);font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;
+  text-align:right;padding:10px 11px;font-weight:700;position:sticky;top:0;white-space:nowrap;
+  border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+th:hover{color:var(--tx)}
+th.l,td.l{text-align:left}
+td{padding:9px 11px;text-align:right;border-bottom:1px solid #1a2534;font-family:var(--mono);
+  font-size:12.5px;white-space:nowrap}
+tbody tr:hover{background:#151f2e}
+tbody tr:last-child td{border-bottom:none}
+.sym{font-weight:700;font-size:13px;color:var(--tx)}
+.nm{font-family:-apple-system,"Segoe UI",sans-serif;color:var(--tx3);font-size:11px}
+.up{color:var(--up)}.dn{color:var(--dn)}.neu{color:var(--neu)}
+.grp td{background:#0e151f;color:var(--acc);font-size:10.5px;letter-spacing:1.2px;
+  text-transform:uppercase;font-weight:700;padding:7px 11px;font-family:inherit}
+
+.tag{display:inline-block;padding:2.5px 8px;border-radius:5px;font-size:10.5px;font-weight:700;
+  letter-spacing:.4px;font-family:-apple-system,sans-serif}
+.t-lg{background:rgba(34,201,138,.16);color:var(--up);border:1px solid rgba(34,201,138,.32)}
+.t-pb{background:rgba(77,163,255,.14);color:var(--acc);border:1px solid rgba(77,163,255,.3)}
+.t-rb{background:rgba(255,176,32,.14);color:var(--warn);border:1px solid rgba(255,176,32,.3)}
+.t-ct{background:rgba(255,92,115,.14);color:var(--dn);border:1px solid rgba(255,92,115,.3)}
+
+/* ---------- pick ---------- */
+.pick{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg2)}
+.pick .hd{padding:11px 15px;font-size:11px;letter-spacing:1.1px;text-transform:uppercase;font-weight:700;
+  display:flex;justify-content:space-between;align-items:center;gap:10px}
+.pk-l .hd{background:rgba(34,201,138,.12);color:var(--up);border-bottom:1px solid rgba(34,201,138,.25)}
+.pk-t .hd{background:rgba(77,163,255,.11);color:var(--acc);border-bottom:1px solid rgba(77,163,255,.24)}
+.pk-s .hd{background:rgba(255,92,115,.11);color:var(--dn);border-bottom:1px solid rgba(255,92,115,.24)}
+.pick .bd{padding:15px}
+.pk-tk{font-family:var(--mono);font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1.1}
+.pk-nm{color:var(--tx2);font-size:12px;margin-bottom:12px}
+.pk-px{font-family:var(--mono);font-size:14px;color:var(--tx2);margin-bottom:12px}
+.pk-why{font-size:12.7px;color:var(--tx2);line-height:1.6}
+.pk-why b{color:var(--tx)}
+.pk-why li{margin-bottom:6px}
+.pk-why ul{margin:8px 0 0;padding-left:17px}
+.lvl{margin-top:13px;padding-top:12px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:11.5px}
+.lvl div{text-align:center;flex:1}
+.lvl span{display:block;color:var(--tx3);font-size:9.5px;letter-spacing:.6px;
+  text-transform:uppercase;margin-bottom:3px;font-family:-apple-system,sans-serif}
+
+/* ---------- news ---------- */
+.news{display:grid;gap:11px}
+.ni{background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--tx3);
+  border-radius:9px;padding:13px 15px}
+.ni.a-up{border-left-color:var(--up)}
+.ni.a-dn{border-left-color:var(--dn)}
+.ni.a-wr{border-left-color:var(--warn)}
+.ni.a-nu{border-left-color:var(--acc)}
+.ni-h{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:7px}
+.ni-t{font-size:14px;font-weight:620;line-height:1.4;color:var(--tx)}
+.ni-m{font-family:var(--mono);font-size:10.5px;color:var(--tx3);white-space:nowrap;padding-top:3px}
+.ni-b{font-size:12.7px;color:var(--tx2);line-height:1.6}
+.ni-b b{color:var(--tx)}
+.alert{margin-top:9px;padding:8px 11px;border-radius:7px;font-size:12px;
+  background:var(--bg3);border:1px solid var(--line);display:flex;gap:9px;align-items:flex-start}
+.alert .ic{font-size:13px;line-height:1.35}
+.alert.up{background:rgba(34,201,138,.08);border-color:rgba(34,201,138,.25)}
+.alert.dn{background:rgba(255,92,115,.08);border-color:rgba(255,92,115,.25)}
+.alert.wr{background:rgba(255,176,32,.08);border-color:rgba(255,176,32,.25)}
+.alert b{color:var(--tx)}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.chip{font-family:var(--mono);font-size:10.5px;padding:2.5px 7px;border-radius:5px;
+  background:var(--bg3);border:1px solid var(--line);color:var(--tx2)}
+.src{display:inline-block;font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;
+  padding:2px 6px;border-radius:4px;background:var(--bg3);color:var(--tx3);border:1px solid var(--line);
+  font-family:-apple-system,sans-serif;margin-right:7px}
+
+/* contador de menciones */
+.bz{display:grid;grid-template-columns:62px 1fr 2.1fr 62px;gap:11px;align-items:center;
+  padding:6px 0;border-bottom:1px solid #1a2534}
+.bz:last-child{border:none}
+.bz-s{font-family:var(--mono);font-weight:700;font-size:13px}
+.bz-n{color:var(--tx3);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bz-b{position:relative;height:17px;display:flex;align-items:center;gap:8px}
+.bz-b>i{display:block;height:17px;border-radius:4px;opacity:.55;min-width:6px}
+.bz-b>b{font-family:var(--mono);font-size:12px;color:var(--tx2)}
+.bz-m{font-family:var(--mono);font-size:11.5px;text-align:right}
+@media(max-width:700px){.bz{grid-template-columns:52px 1.6fr 52px}.bz-n{display:none}}
+
+#livenews{display:grid;gap:8px;max-height:420px;overflow-y:auto;padding-right:5px}
+.lnw{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:10px 13px;font-size:12.7px}
+.lnw a{color:var(--tx);font-weight:550;line-height:1.4;display:block}
+.lnw a:hover{color:var(--acc)}
+.lnw .mt{font-family:var(--mono);font-size:10px;color:var(--tx3);margin-top:5px}
+.hit{border-color:rgba(255,176,32,.4);background:rgba(255,176,32,.05)}
+
+/* ---------- quadrant ---------- */
+.quad{position:relative;height:430px;background:var(--bg2);border:1px solid var(--line);
+  border-radius:12px;overflow:hidden}
+.quad .ax{position:absolute;background:var(--line)}
+.qlab{position:absolute;font-size:10px;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--tx3);font-weight:700;pointer-events:none}
+.pt{position:absolute;transform:translate(-50%,-50%);font-family:var(--mono);font-size:10.5px;
+  font-weight:700;padding:2.5px 6px;border-radius:5px;cursor:default;white-space:nowrap;
+  border:1px solid;transition:.15s}
+.pt:hover{z-index:99;transform:translate(-50%,-50%) scale(1.22)}
+
+.note{font-size:12px;color:var(--tx3);line-height:1.65;margin-top:11px}
+.note b{color:var(--tx2)}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1a2534;font-size:12.5px}
+.kv:last-child{border:none}
+.kv span:first-child{color:var(--tx2)}
+.kv span:last-child{font-family:var(--mono);font-weight:600}
+footer{margin-top:44px;padding:16px 18px;background:var(--bg2);border:1px solid var(--line);
+  border-radius:10px;font-size:11.5px;color:var(--tx3);line-height:1.7}
+footer b{color:var(--tx2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Radar de Mercados</h1>
+    <div class="sub">ETFs, sectores y señales técnicas · qué está largo y qué está corto · <b id="asof">cierre del viernes 14-ago-2026</b></div>
+  </div>
+  <div class="hdr-r">
+    <div id="status"><span class="dot"></span>snapshot inicial</div>
+    <button id="btnNews">↻ Noticias</button>
+    <button class="primary" id="btnLive">⟳ Actualizar en vivo</button>
+  </div>
+</header>
+
+<!-- ============ REGIMEN ============ -->
+<h2>Termómetro del mercado</h2>
+<div class="card">
+  <div class="regime">
+    <div class="gauge">
+      <div class="gnum" id="rgNum">–</div>
+      <div class="glab" id="rgLab">calculando…</div>
+      <div class="gsub">0 = miedo total · 100 = euforia</div>
+      <div class="bar"><i id="rgBar" style="width:0%"></i></div>
+    </div>
+    <div class="pillars" id="pillars"></div>
+  </div>
+  <div class="note" id="rgTxt"></div>
+</div>
+
+<!-- ============ PICK ============ -->
+<h2>Lectura técnica de hoy — qué elegiría</h2>
+<div class="grid g3" id="picks"></div>
+<div class="card" style="margin-top:14px" id="extremos"></div>
+<div class="note" style="margin-top:14px">
+  <b>Cómo se construye:</b> el motor cruza cuatro filtros sobre los 46 instrumentos — estructura de largo plazo
+  (precio vs. media de 200 sesiones y cruce 50/200), momentum de corto (1 mes y precio vs. media de 50),
+  posición en el rango de 52 semanas, y volatilidad anualizada de 20 días. Después descuenta lo que ya está
+  sobre-extendido y premia lo que está fuerte pero todavía rezagado en el año. El nivel de invalidación es
+  siempre la media de 50 sesiones: si cierra abajo, la tesis de corto plazo se cae.
+</div>
+
+<!-- ============ NOTICIAS CURADAS ============ -->
+<h2>Noticias que mueven la aguja — y cómo impactan</h2>
+<div class="news" id="curated"></div>
+
+<!-- ============ NOTICIAS EN VIVO ============ -->
+<h2>Dónde se está concentrando la novedad</h2>
+<div class="card">
+  <div id="buzz"><div style="color:var(--tx3);font-size:12.5px">
+    Apretá <b>↻ Noticias</b> y acá aparece el conteo de menciones por instrumento — cuántos titulares
+    de la tanda tocan cada ETF, ordenados de mayor a menor.
+  </div></div>
+  <div class="note" id="buzzNota"></div>
+</div>
+
+<h2>Titulares en vivo <span style="font-size:10px;color:var(--tx3);letter-spacing:0;text-transform:none;font-weight:400">— CNBC · Yahoo Finance · Reuters</span></h2>
+<div class="card">
+  <div id="livenews"><div style="color:var(--tx3);font-size:12.5px">
+    Apretá <b>↻ Noticias</b> para traer los titulares del momento. Los que tocan un instrumento del radar
+    quedan marcados en ámbar con el ticker afectado.
+  </div></div>
+</div>
+
+<!-- ============ ROTACION ============ -->
+<h2>Mapa de rotación — dónde está entrando y saliendo la plata</h2>
+<div class="quad" id="quad"></div>
+<div class="note">
+  Eje horizontal: <b>tendencia larga</b> (precio vs. media de 200 sesiones). Eje vertical: <b>momentum corto</b>
+  (último mes). Arriba-derecha = <b>líderes</b> (largo y corto alineados). Abajo-derecha = <b>debilitándose</b>
+  (tendencia intacta pero perdiendo fuerza: ahí aparecen los pullbacks y también las primeras fugas).
+  Arriba-izquierda = <b>rebotes</b> (fuerza reciente sin estructura que la respalde). Abajo-izquierda =
+  <b>rezagados</b>. La rotación sectorial suele anticipar los giros del índice general en 2 a 4 meses.
+</div>
+
+<!-- ============ TABLA ============ -->
+<h2>Radar completo — largo plazo vs. corto plazo</h2>
+<div class="tblwrap">
+  <table id="tbl">
+    <thead><tr>
+      <th class="l" data-k="sym">Instrumento</th>
+      <th data-k="px">Precio</th>
+      <th data-k="d1">Día</th>
+      <th data-k="w1">1 sem</th>
+      <th data-k="m1">1 mes</th>
+      <th data-k="m3">3 meses</th>
+      <th data-k="ytd">Año</th>
+      <th data-k="y1">12 meses</th>
+      <th data-k="v50">vs 50d</th>
+      <th data-k="v200">vs 200d</th>
+      <th data-k="rng">Rango 52s</th>
+      <th data-k="vol">Volat.</th>
+      <th class="l">Largo plazo</th>
+      <th class="l">Corto plazo</th>
+    </tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+</div>
+<div class="note">
+  <b>vs 50d / vs 200d:</b> cuánto está el precio por encima o debajo de su media móvil. La de 200 marca la
+  <b>tendencia estructural</b> (largo plazo); la de 50, el <b>pulso reciente</b> (corto plazo). ·
+  <b>Rango 52s:</b> 100% = está en el máximo del año; 0% = en el mínimo. ·
+  <b>Volat.:</b> volatilidad anualizada de las últimas 20 sesiones — cuánto se mueve, para dimensionar el riesgo. ·
+  Ordená por cualquier columna haciendo clic en el encabezado.
+</div>
+
+<!-- ============ CHILE ============ -->
+<h2>Chile — IPSA, Larraín Vial y la trampa del dólar</h2>
+<div class="grid g2">
+  <div class="card">
+    <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--tx3);font-weight:700;margin-bottom:11px">Cartera recomendada · LarrainVial Research</div>
+    <div class="note" style="margin:0 0 12px">Doce papeles con recomendación de <b>sobreponderar</b>:</div>
+    <div class="chips" style="margin:0">
+      <span class="chip">Engie Energía</span><span class="chip">Aguas Andinas</span><span class="chip">COPEC</span>
+      <span class="chip">SQM-B</span><span class="chip">Banco de Chile</span><span class="chip">Santander</span>
+      <span class="chip">Itaú</span><span class="chip">Ripley</span><span class="chip">SMU</span>
+      <span class="chip">Cencosud Shopping</span><span class="chip">Mallplaza</span><span class="chip">Parque Arauco</span>
+    </div>
+    <div class="note">
+      El sesgo está clarísimo: <b>malls, bancos y utilities</b>. Es una apuesta directa a que las tasas locales
+      siguen bajando — los tres sectores son los que más se benefician. En agosto LarrainVial además
+      <b>redujo Asia y subió Latinoamérica</b>, y en renta fija se corrió a <b>bonos de calidad y duración corta</b>,
+      con más exposición a UF por el riesgo inflacionario del petróleo. La data global le da la razón en ambas:
+      China (MCHI) rinde <b class="dn">−8,5%</b> en el año y los bonos largos (TLT) están en el piso de su rango de 52 semanas.
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--tx3);font-weight:700;margin-bottom:11px">La brecha que hay que mirar</div>
+    <div id="chileKv"></div>
+    <div class="note">
+      Acá está el punto no obvio: el <b>IPSA anda cerca de máximos históricos</b> (sobre los 10.700 puntos), con
+      Parque Arauco y Engie liderando cerca de <b>+34%</b>, Mallplaza <b>+24%</b> e ILC <b>+23%</b>. Pero
+      <b>ECH — el ETF de Chile que se transa en dólares — apenas rinde <span id="echYtd">+1,4%</span> en el año</b>.
+      Toda esa diferencia se la come el tipo de cambio y la composición del índice.
+      <br><br>
+      La conclusión práctica: <b>comprar Chile desde afuera en dólares no es lo mismo que comprar Chile en pesos.</b>
+      Si el peso se deprecia, el retorno en pesos se evapora al convertirlo. Para exposición local, la bolsa local
+      gana; ECH sirve para otra cosa — y hoy además arrastra un cruce bajista y está 13,5% bajo su máximo.
+    </div>
+  </div>
+</div>
+
+<!-- ============ MANUAL ============ -->
+<h2>Cómo se lee esto</h2>
+<div class="grid g4">
+  <div class="card">
+    <div style="font-weight:700;margin-bottom:8px;font-size:13.5px">Largo ≠ corto</div>
+    <div class="note" style="margin:0">
+      Un instrumento puede estar <b>largo alcista y corto bajista</b> al mismo tiempo, y eso no es contradicción:
+      es un pullback dentro de una tendencia sana. La confusión más cara del mercado minorista es tratar una
+      corrección de dos semanas como si fuera un cambio de ciclo.
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-weight:700;margin-bottom:8px;font-size:13.5px">Núcleo y satélites</div>
+    <div class="note" style="margin:0">
+      El estándar institucional: <b>70–90% en un núcleo</b> amplio y barato que no se toca (tipo VT o SPY), y
+      <b>10–30% en satélites</b> tácticos donde se expresan las visiones — sectores, países, temas. Este dashboard
+      sirve para los satélites; el núcleo no se maneja con señales de un mes.
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-weight:700;margin-bottom:8px;font-size:13.5px">Confluencia, no señal única</div>
+    <div class="note" style="margin:0">
+      Ningún indicador solo sirve. La regla es <b>confirmación cruzada</b>: crédito, volatilidad y amplitud
+      apuntando al mismo lado es muchísimo más confiable que cualquiera de los tres por separado.
+      El termómetro de arriba está construido así, con seis pilares.
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-weight:700;margin-bottom:8px;font-size:13.5px">Las medias van atrás</div>
+    <div class="note" style="margin:0">
+      Los cruces 50/200 son <b>indicadores rezagados</b>: confirman lo que ya pasó. Históricamente el cruce
+      alcista en índices grandes precedió alzas sostenidas cerca del 70% de las veces, pero <b>siempre</b>
+      después de que buena parte del movimiento ya ocurrió. Sirven para confirmar, no para adivinar.
+    </div>
+  </div>
+</div>
+
+<footer>
+  <b>Fuentes.</b> Precios y series históricas: Yahoo Finance (API pública de charts, 251 sesiones por instrumento,
+  cierres ajustados). Titulares en vivo: CNBC, Yahoo Finance y Reuters vía feeds RSS. Contexto de mercado y
+  agenda: XTB (Análisis y Noticias, Alertas de Mercado y Señales de Trading) y LarrainVial Research
+  (LV Insights, Visión de agosto 2026 y cartera recomendada de acciones).
+  <br><br>
+  <b>Qué es y qué no es esto.</b> Este panel es una <b>lectura técnica y de contexto de mercado</b>, construida con
+  reglas explícitas sobre datos públicos. No es asesoría de inversión, no considera tu situación financiera,
+  tus objetivos ni tu tolerancia al riesgo, y no soy asesor financiero registrado. Las señales técnicas
+  fallan con frecuencia y el rendimiento pasado no anticipa el futuro. Para decisiones reales de plata,
+  la conversación va con un asesor con licencia.
+  <br><br>
+  <b>Actualización.</b> El botón <b>Actualizar en vivo</b> vuelve a bajar las 251 sesiones de cada instrumento y
+  recalcula todo — medias, momentum, termómetro y el pick del día. Requiere conexión a internet.
+  Si el proveedor de datos limita el tráfico, el panel queda con el último snapshot válido y lo avisa arriba.
+</footer>
+
+</div>
+
+<script>
+/* ═════ SNAPSHOT — Yahoo Finance, cierre del viernes 14-ago-2026 (bajado el 16-ago) ═════ */
+var SNAP=[
+{sym:"SPY",px:776.34,d1:-0.2,w1:0.4,m1:3.41,m3:4.03,m6:14.56,y1:21.72,ytd:14.45,ma50:748.54,ma200:702.75,v50:3.71,v200:10.47,cross:"golden",hi52:777.88,lo52:628.59,fromHi:-0.2,rng:98.97,vol:13.33},
+{sym:"QQQ",px:731.07,d1:-0.14,w1:1.11,m1:3.56,m3:1.68,m6:22,y1:26.58,ytd:19.29,ma50:712.78,ma200:649.53,v50:2.57,v200:12.55,cross:"golden",hi52:745.34,lo52:557.67,fromHi:-1.91,rng:92.4,vol:23.64},
+{sym:"IWM",px:305.09,d1:0.52,w1:1.17,m1:3.21,m3:7.51,m6:18.04,y1:33.32,ytd:24.46,ma50:295.01,ma200:267.71,v50:3.42,v200:13.96,cross:"golden",hi52:305.09,lo52:223.09,fromHi:0,rng:100,vol:15.24},
+{sym:"RSP",px:222.77,d1:0.02,w1:1.22,m1:3.59,m3:9.81,m6:11.85,y1:20.76,ytd:17.24,ma50:213.76,ma200:200.01,v50:4.22,v200:11.38,cross:"golden",hi52:222.77,lo52:179.99,fromHi:0,rng:100,vol:9.79},
+{sym:"DIA",px:536.8,d1:-0.21,w1:-0.52,m1:2.31,m3:7.57,m6:9.32,y1:21.24,ytd:12.57,ma50:522.84,ma200:491.68,v50:2.67,v200:9.18,cross:"golden",hi52:542.81,lo52:441.56,fromHi:-1.11,rng:94.06,vol:14.25},
+{sym:"VT",px:162.25,d1:-0.09,w1:0.59,m1:3.92,m3:4.37,m6:11.82,y1:23.48,ytd:15.71,ma50:156.6,ma200:147.1,v50:3.61,v200:10.3,cross:"golden",hi52:162.39,lo52:129.91,fromHi:-0.09,rng:99.57,vol:13.55},
+{sym:"EFA",px:108.64,d1:-0.05,w1:0.08,m1:4.5,m3:7,m6:5.87,y1:24.86,ytd:14.92,ma50:104.32,ma200:99,v50:4.14,v200:9.74,cross:"golden",hi52:108.69,lo52:87.58,fromHi:-0.05,rng:99.76,vol:13},
+{sym:"VWO",px:60.11,d1:-0.38,w1:-0.6,m1:2.16,m3:0.37,m6:4.19,y1:19.1,ytd:11.94,ma50:59.2,ma200:56.72,v50:1.53,v200:5.98,cross:"golden",hi52:61.24,lo52:49.9,fromHi:-1.85,rng:90.03,vol:15.02},
+{sym:"EWZ",px:33.93,d1:0.47,w1:-3.99,m1:-3.96,m3:-7.75,m6:-11.01,y1:25.81,ytd:7.82,ma50:34.94,ma200:35.22,v50:-2.89,v200:-3.66,cross:"death",hi52:41.34,lo52:26.18,fromHi:-17.92,rng:51.12,vol:22.73},
+{sym:"ECH",px:40.32,d1:0.7,w1:-2.25,m1:3.2,m3:2.03,m6:-7.44,y1:26.31,ytd:1.38,ma50:39.75,ma200:40.07,v50:1.43,v200:0.61,cross:"death",hi52:46.63,lo52:30.9,fromHi:-13.54,rng:59.87,vol:19.06},
+{sym:"EWW",px:75.01,d1:-0.58,w1:-3.24,m1:-0.28,m3:-3.65,m6:-4.76,y1:25.14,ytd:9.78,ma50:75.77,ma200:73.55,v50:-1,v200:1.99,cross:"golden",hi52:80.05,lo52:58.97,fromHi:-6.3,rng:76.08,vol:17.22},
+{sym:"EZU",px:71.99,d1:0.15,w1:0.59,m1:5.5,m3:8.9,m6:8.35,y1:22.4,ytd:14.32,ma50:68.96,ma200:65.13,v50:4.39,v200:10.54,cross:"golden",hi52:71.99,lo52:57.45,fromHi:0,rng:100,vol:15.01},
+{sym:"EWJ",px:98.21,d1:-0.26,w1:1.35,m1:6.85,m3:7.26,m6:5.76,y1:29.23,ytd:22.3,ma50:93.31,ma200:87.17,v50:5.25,v200:12.66,cross:"golden",hi52:98.47,lo52:74.71,fromHi:-0.26,rng:98.91,vol:22.82},
+{sym:"MCHI",px:54.63,d1:0.39,w1:-3.43,m1:0.91,m3:-5.35,m6:-9.22,y1:-8.08,ytd:-8.45,ma50:53.72,ma200:57.9,v50:1.69,v200:-5.65,cross:"death",hi52:65.75,lo52:50.48,fromHi:-16.91,rng:27.19,vol:16.36},
+{sym:"INDA",px:49.78,d1:-0.4,w1:-1.17,m1:2.24,m3:2.94,m6:-6.27,y1:-5.56,ytd:-7.9,ma50:49.11,ma200:50.78,v50:1.37,v200:-1.98,cross:"death",hi52:55.29,lo52:45.42,fromHi:-9.97,rng:44.17,vol:12.52},
+{sym:"XLK",px:190.01,d1:-0.4,w1:1.09,m1:7.04,m3:5.98,m6:36.82,y1:42.38,ytd:32.3,ma50:182.77,ma200:157.26,v50:3.96,v200:20.82,cross:"golden",hi52:197.97,lo52:127.35,fromHi:-4.02,rng:88.72,vol:32.73},
+{sym:"XLC",px:112.95,d1:0.36,w1:1.53,m1:1.35,m3:-2.26,m6:-3.38,y1:5.72,ytd:-3.5,ma50:110.14,ma200:113.71,v50:2.55,v200:-0.67,cross:"death",hi52:119.39,lo52:105.38,fromHi:-5.39,rng:54.04,vol:27.72},
+{sym:"XLY",px:118.2,d1:-0.21,w1:-1.38,m1:0.73,m3:-0.2,m6:2.19,y1:3.65,ytd:-0.62,ma50:115.92,ma200:116.75,v50:1.96,v200:1.24,cross:"death",hi52:124.02,lo52:105.45,fromHi:-4.7,rng:68.65,vol:24.81},
+{sym:"XLI",px:186.51,d1:0.39,w1:0.72,m1:3.4,m3:6.81,m6:7.94,y1:25.25,ytd:20.87,ma50:180.49,ma200:167.85,v50:3.33,v200:11.12,cross:"golden",hi52:186.51,lo52:146.55,fromHi:0,rng:100,vol:19.28},
+{sym:"XLF",px:58.16,d1:-0.17,w1:0.97,m1:2.48,m3:13.79,m6:13.49,y1:11.95,ytd:7.11,ma50:55.42,ma200:52.78,v50:4.95,v200:10.19,cross:"golden",hi52:58.26,lo52:47.64,fromHi:-0.17,rng:99.06,vol:10.43},
+{sym:"XLE",px:61.91,d1:1.39,w1:7.67,m1:8.58,m3:7.38,m6:16.27,y1:49.09,ytd:40.38,ma50:56.88,ma200:52.88,v50:8.84,v200:17.08,cross:"golden",hi52:62.11,lo52:41.24,fromHi:-0.33,rng:99.03,vol:24.53},
+{sym:"XLB",px:52.54,d1:0.44,w1:-0.61,m1:3.24,m3:2.06,m6:0.27,y1:17.6,ytd:16.8,ma50:51.34,ma200:49.06,v50:2.34,v200:7.1,cross:"golden",hi52:53.24,lo52:41.67,fromHi:-1.31,rng:93.95,vol:19.56},
+{sym:"XLV",px:167.37,d1:-0.6,w1:1.02,m1:3.44,m3:14.65,m6:8.2,y1:27.76,ytd:9.04,ma50:159.67,ma200:152.54,v50:4.82,v200:9.72,cross:"golden",hi52:168.44,lo52:131.66,fromHi:-0.64,rng:97.09,vol:15.41},
+{sym:"XLP",px:86.09,d1:0.1,w1:1.14,m1:0.33,m3:2.01,m6:-2.28,y1:7.08,ytd:12.22,ma50:84.45,ma200:81.86,v50:1.95,v200:5.17,cross:"golden",hi52:88.89,lo52:74.06,fromHi:-3.15,rng:81.12,vol:15.2},
+{sym:"XLU",px:44.31,d1:0.61,w1:1.61,m1:-2.55,m3:-0.68,m6:-0.76,y1:5.34,ytd:5.19,ma50:44.78,ma200:44.33,v50:-1.06,v200:-0.05,cross:"golden",hi52:47.1,lo52:40.19,fromHi:-5.92,rng:59.65,vol:14.25},
+{sym:"XLRE",px:45.27,d1:0.33,w1:0.64,m1:-0.42,m3:4,m6:7.24,y1:13.25,ytd:13.94,ma50:44.75,ma200:42.28,v50:1.16,v200:7.06,cross:"golden",hi52:46.01,lo52:39.28,fromHi:-1.61,rng:89,vol:13.7},
+{sym:"TLT",px:82.04,d1:-0.67,w1:-0.87,m1:-2.18,m3:-2.26,m6:-5.95,y1:-2.14,ytd:-3.35,ma50:84.08,ma200:85.24,v50:-2.42,v200:-3.75,cross:"death",hi52:88.79,lo52:81.92,fromHi:-7.6,rng:1.75,vol:9.71},
+{sym:"IEF",px:93.04,d1:-0.28,w1:-0.14,m1:-0.38,m3:-0.29,m6:-2.01,y1:1.01,ytd:-1.01,ma50:93.32,ma200:93.88,v50:-0.3,v200:-0.89,cross:"death",hi52:96.09,lo52:91.55,fromHi:-3.17,rng:32.88,vol:4.64},
+{sym:"LQD",px:106.12,d1:-0.4,w1:-0.4,m1:-0.86,m3:-1.1,m6:-2.36,y1:0.69,ytd:-1.08,ma50:107.14,ma200:107.46,v50:-0.95,v200:-1.24,cross:"death",hi52:109.17,lo52:104.51,fromHi:-2.8,rng:34.51,vol:5.37},
+{sym:"HYG",px:79.71,d1:-0.1,w1:0.13,m1:0.37,m3:1.29,m6:1.62,y1:4.83,ytd:2.33,ma50:79.22,ma200:78.34,v50:0.61,v200:1.75,cross:"golden",hi52:79.79,lo52:75.65,fromHi:-0.1,rng:98.07,vol:2.9},
+{sym:"GLD",px:401.48,d1:0.63,w1:0.76,m1:10.01,m3:-6.02,m6:-11.06,y1:29.84,ytd:1.3,ma50:381.3,ma200:412.35,v50:5.29,v200:-2.64,cross:"death",hi52:495.9,lo52:305.27,fromHi:-19.04,rng:50.47,vol:22.97},
+{sym:"SLV",px:58.48,d1:0.55,w1:1.7,m1:16.05,m3:-22.55,m6:-13.66,y1:67.09,ytd:-9.22,ma50:55.74,ma200:64.14,v50:4.91,v200:-8.82,cross:"death",hi52:105.6,lo52:33.87,fromHi:-44.62,rng:34.31,vol:34.89},
+{sym:"GDX",px:89.97,d1:1.93,w1:0.09,m1:26.01,m3:-4.24,m6:-8.46,y1:56.06,ytd:4.9,ma50:78.71,ma200:87.82,v50:14.31,v200:2.44,cross:"death",hi52:115.84,lo52:56.19,fromHi:-22.33,rng:56.63,vol:47.93},
+{sym:"DBC",px:30,d1:0.74,w1:3.77,m1:5.41,m3:-3.69,m6:26.05,y1:42.57,ytd:34.17,ma50:28.5,ma200:26.48,v50:5.27,v200:13.31,cross:"golden",hi52:31.69,lo52:20.92,fromHi:-5.33,rng:84.31,vol:26.62},
+{sym:"SMH",px:587.82,d1:-0.22,w1:0.88,m1:3.32,m3:1.64,m6:44.74,y1:95.71,ytd:63.22,ma50:591.49,ma200:461.82,v50:-0.62,v200:27.28,cross:"golden",hi52:668.91,lo52:285.54,fromHi:-12.12,rng:78.85,vol:46.39},
+{sym:"IGV",px:104.08,d1:-2.07,w1:1.35,m1:11.08,m3:14.85,m6:28.58,y1:-4.97,ytd:-1.5,ma50:93.85,ma200:94.13,v50:10.9,v200:10.57,cross:"death",hi52:117.77,lo52:74.66,fromHi:-11.62,rng:68.25,vol:34.57},
+{sym:"ITA",px:253.22,d1:1.41,w1:0.99,m1:9.67,m3:12.89,m6:9.04,y1:29.32,ytd:18.11,ma50:239.75,ma200:227.46,v50:5.62,v200:11.33,cross:"golden",hi52:253.22,lo52:192.26,fromHi:0,rng:100,vol:22.31},
+{sym:"URA",px:44.93,d1:-0.71,w1:0.04,m1:14.88,m3:-14.42,m6:-13.18,y1:19.33,ytd:5.15,ma50:43.14,ma200:48.33,v50:4.14,v200:-7.04,cross:"death",hi52:61.81,lo52:34.79,fromHi:-27.31,rng:37.53,vol:42.59},
+{sym:"XBI",px:157.41,d1:0.35,w1:0.03,m1:3.56,m3:16.84,m6:27.91,y1:76.64,ytd:29.23,ma50:149.92,ma200:131.21,v50:5,v200:19.97,cross:"golden",hi52:164.28,lo52:88.39,fromHi:-4.18,rng:90.95,vol:25.21},
+{sym:"ARKK",px:81.1,d1:-1.8,w1:2.1,m1:5.78,m3:3.97,m6:18.48,y1:4.09,ytd:5.43,ma50:77.52,ma200:76.82,v50:4.62,v200:5.57,cross:"golden",hi52:92.53,lo52:63.52,fromHi:-12.35,rng:60.6,vol:38.92},
+{sym:"^VIX",px:14.25,d1:-2.6,w1:-4.36,m1:-16.96,m3:-20.79,m6:-19.9,y1:-12.31,ytd:-4.68,ma50:17.14,ma200:18.52,v50:-16.88,v200:-23.07,cross:"death",hi52:31.05,lo52:13.47,fromHi:-54.11,rng:4.44,vol:107.7},
+{sym:"^TNX",px:4.7,d1:1.19,w1:0.77,m1:2.78,m3:5.27,m6:14.42,y1:10.81,ytd:12.8,ma50:4.56,ma200:4.31,v50:2.96,v200:8.89,cross:"golden",hi52:4.74,lo52:3.95,fromHi:-1.03,rng:93.81,vol:14.49},
+{sym:"^GSPC",px:7785.76,d1:-0.17,w1:0.36,m1:3.34,m3:3.79,m6:13.95,y1:20.4,ytd:13.74,ma50:7512.39,ma200:7074.9,v50:3.64,v200:10.05,cross:"golden",hi52:7798.99,lo52:6343.72,fromHi:-0.17,rng:99.09,vol:13.3},
+{sym:"DX-Y.NYB",px:99.67,d1:-0.29,w1:0.07,m1:-1.05,m3:0.8,m6:2.83,y1:1.87,ytd:1.41,ma50:100.55,ma200:99.19,v50:-0.88,v200:0.48,cross:"golden",hi52:101.61,lo52:96.22,fromHi:-1.91,rng:64.01,vol:4.58},
+{sym:"CLP=X",px:914.45,d1:0.05,w1:0.21,m1:-1.05,m3:1.04,m6:5.71,y1:-4.96,ytd:1.61,ma50:919.95,ma200:904.08,v50:-0.6,v200:1.15,cross:"golden",hi52:973.14,lo52:852.37,fromHi:-6.03,rng:51.4,vol:7.16},
+{sym:"BTC-USD",px:63041.79,d1:0.11,w1:-1.36,m1:-1.97,m3:-2.14,m6:-13.71,y1:-29.38,ytd:-27.96,ma50:63511.29,ma200:69371.28,v50:-0.74,v200:-9.12,cross:"death",hi52:96929.33,lo52:58558.86,fromHi:-34.96,rng:11.68,vol:17.58}
+];
+
+/* ══════════════════ CATALOGO ══════════════════ */
+var META={
+ "SPY":["S&P 500","IDX"],"QQQ":["Nasdaq 100","IDX"],"IWM":["Russell 2000 · small caps","IDX"],
+ "RSP":["S&P 500 equiponderado","IDX"],"DIA":["Dow Jones 30","IDX"],"VT":["Acciones mundo entero","IDX"],
+ "^GSPC":["Índice S&P 500","IDX"],
+ "EFA":["Desarrollados ex-EEUU","REG"],"VWO":["Emergentes","REG"],"EWZ":["Brasil","REG"],
+ "ECH":["Chile","REG"],"EWW":["México","REG"],"EZU":["Zona Euro","REG"],"EWJ":["Japón","REG"],
+ "MCHI":["China","REG"],"INDA":["India","REG"],
+ "XLK":["Tecnología","SEC"],"XLC":["Comunicaciones","SEC"],"XLY":["Consumo discrecional","SEC"],
+ "XLI":["Industriales","SEC"],"XLF":["Financiero","SEC"],"XLE":["Energía","SEC"],
+ "XLB":["Materiales","SEC"],"XLV":["Salud","SEC"],"XLP":["Consumo básico","SEC"],
+ "XLU":["Utilities","SEC"],"XLRE":["Inmobiliario","SEC"],
+ "SMH":["Semiconductores","TEM"],"IGV":["Software","TEM"],"ITA":["Defensa y aeroespacial","TEM"],
+ "URA":["Uranio","TEM"],"XBI":["Biotecnología","TEM"],"ARKK":["Innovación disruptiva","TEM"],
+ "TLT":["Bonos EEUU 20+ años","RF"],"IEF":["Bonos EEUU 7-10 años","RF"],
+ "LQD":["Deuda grado inversión","RF"],"HYG":["Deuda alto rendimiento","RF"],
+ "GLD":["Oro","MAT"],"SLV":["Plata","MAT"],"GDX":["Mineras de oro","MAT"],
+ "DBC":["Canasta de materias primas","MAT"],
+ "^VIX":["Índice del miedo","MAC"],"^TNX":["Tasa EEUU 10 años","MAC"],
+ "DX-Y.NYB":["Índice dólar","MAC"],"CLP=X":["Dólar / peso chileno","MAC"],"BTC-USD":["Bitcoin","MAC"]
+};
+var GRUPOS=[["IDX","Índices y núcleo"],["SEC","Sectores de EEUU"],["TEM","Temáticos"],
+  ["REG","Regiones y países"],["RF","Renta fija y crédito"],["MAT","Materias primas"],
+  ["MAC","Macro y termómetros"]];
+var LIVE=null, D=SNAP.slice();
+var f=function(n,d){return n==null||isNaN(n)?"–":(n>0?"+":"")+n.toFixed(d===undefined?2:d)};
+var cls=function(n){return n==null||isNaN(n)?"neu":n>0.05?"up":n<-0.05?"dn":"neu"};
+var get=function(s){for(var i=0;i<D.length;i++)if(D[i].sym===s)return D[i];return null};
+
+/* ══════════════════ VEREDICTOS ══════════════════ */
+function vLargo(r){
+  if(r.v200>0&&r.cross==="golden")return['<span class="tag t-lg">ALCISTA</span>','sobre su media de 200 con cruce alcista'];
+  if(r.v200>0)return['<span class="tag t-rb">EN TRANSICIÓN</span>','sobre la media de 200 pero sin cruce que lo confirme'];
+  if(r.v200<0&&r.cross==="death")return['<span class="tag t-ct">BAJISTA</span>','bajo su media de 200 con cruce bajista'];
+  return['<span class="tag t-rb">DEBILITADO</span>','perdió la media de 200'];
+}
+function vCorto(r){
+  var f50=r.v50>0, mom=r.m1>0;
+  if(f50&&mom)return['<span class="tag t-lg">CON FUERZA</span>','arriba de la media de 50 y subiendo'];
+  if(f50&&!mom)return['<span class="tag t-rb">PERDIENDO IMPULSO</span>','aguanta la media de 50 pero el mes viene flojo'];
+  if(!f50&&mom)return['<span class="tag t-pb">REBOTANDO</span>','recuperando aunque todavía bajo la media de 50'];
+  return['<span class="tag t-ct">DÉBIL</span>','bajo la media de 50 y cayendo'];
+}
+
+/* ══════════════════ TERMOMETRO ══════════════════ */
+function regimen(){
+  var spy=get("^GSPC")||get("SPY"),rsp=get("RSP"),iwm=get("IWM"),vix=get("^VIX"),
+      hyg=get("HYG"),lqd=get("LQD"),tnx=get("^TNX"),xly=get("XLY"),xlp=get("XLP"),xle=get("XLE");
+  var P=[],sc=[];
+  // 1 tendencia
+  var t=spy.v200, s1=Math.max(0,Math.min(100,50+t*4.5));
+  P.push(["Tendencia","S&P vs media 200",f(t)+"%",cls(t),
+    t>5?"El índice manda claramente arriba de su piso estructural.":t>0?"Arriba de la media de 200, pero con poco colchón.":"Perdió el piso de largo plazo."]);sc.push(s1);
+  // 2 amplitud
+  var amp=rsp.ytd-spy.ytd, s2=Math.max(0,Math.min(100,50+amp*7));
+  P.push(["Amplitud","Equiponderado vs índice",f(amp)+" pts",cls(amp),
+    amp>0?"El S&P equiponderado le gana al normal: sube la tropa completa, no solo las gigantes.":"Solo las mega-caps sostienen el índice — rally angosto y frágil."]);sc.push(s2);
+  // 3 volatilidad
+  var s3=Math.max(0,Math.min(100,100-(vix.px-10)*4));
+  P.push(["Volatilidad","VIX "+vix.px.toFixed(2),"pct "+vix.rng.toFixed(0)+"%",vix.px<16?"up":vix.px>22?"dn":"neu",
+    vix.px<15?"Calma extrema. Bueno para el que ya está adentro, caro para cubrirse... y suele avisar poco.":vix.px<20?"Volatilidad normal, sin estrés a la vista.":"Miedo en el sistema."]);sc.push(s3);
+  // 4 credito
+  var cr=hyg.m3-lqd.m3, s4=Math.max(0,Math.min(100,50+cr*13));
+  P.push(["Crédito","Alto rendimiento vs grado inv.",f(cr)+" pts",cls(cr),
+    cr>0?"El crédito riesgoso le gana al seguro: nadie está pidiendo la cuenta todavía.":"Los bonos riesgosos se quedan atrás — primera grieta del sistema."]);sc.push(s4);
+  // 5 tasas
+  var s5=Math.max(0,Math.min(100,100-tnx.rng));
+  P.push(["Tasas largas","Bono EEUU 10 años",tnx.px.toFixed(2)+"%",tnx.rng>80?"dn":tnx.rng<40?"up":"neu",
+    tnx.rng>85?"La tasa a 10 años está pegada a su techo del año: viento de frente para todo lo que vale por su flujo futuro.":"Tasas sin presionar al mercado."]);sc.push(s5);
+  // 6 ciclicos vs defensivos
+  var cd=((xly.m3+xle.m3)/2)-xlp.m3, s6=Math.max(0,Math.min(100,50+cd*5));
+  P.push(["Apetito","Cíclicos vs defensivos",f(cd)+" pts",cls(cd),
+    cd>0?"La plata va a lo cíclico — el mercado apuesta a que la economía aguanta.":"Rotación defensiva: el mercado se está poniendo el casco."]);sc.push(s6);
+
+  var tot=Math.round(sc.reduce(function(a,b){return a+b},0)/sc.length);
+  var lab,col;
+  if(tot>=72){lab="RIESGO ENCENDIDO";col="var(--up)"}
+  else if(tot>=58){lab="RIESGO ENCENDIDO · con reparos";col="var(--up)"}
+  else if(tot>=42){lab="NEUTRAL";col="var(--warn)"}
+  else if(tot>=28){lab="A LA DEFENSIVA";col="var(--hot)"}
+  else{lab="RIESGO APAGADO";col="var(--dn)"}
+
+  document.getElementById("rgNum").textContent=tot;
+  document.getElementById("rgNum").style.color=col;
+  document.getElementById("rgLab").textContent=lab;
+  document.getElementById("rgLab").style.color=col;
+  document.getElementById("rgBar").style.width=tot+"%";
+  document.getElementById("rgBar").style.background=col;
+  document.getElementById("pillars").innerHTML=P.map(function(p){
+    return '<div class="pil"><div class="t">'+p[0]+'</div><div class="v '+p[3]+'">'+p[2]+
+      '</div><div class="d" style="color:var(--tx3);font-size:10.5px;margin-bottom:4px">'+p[1]+'</div><div class="d">'+p[4]+'</div></div>';
+  }).join("");
+
+  var alertas=[];
+  if(vix.px<15)alertas.push("el VIX en "+vix.px.toFixed(2)+" (percentil "+vix.rng.toFixed(0)+" del año) es <b>complacencia</b>, y la complacencia no avisa antes de romperse");
+  if(tnx.rng>85)alertas.push("la tasa a 10 años en "+tnx.px.toFixed(2)+"% está en el <b>tope de su rango anual</b> pese a que el mercado ya descartó nuevas alzas — eso es empinamiento de curva por miedo inflacionario, no por crecimiento");
+  var smh=get("SMH"); if(smh&&smh.v50<0)alertas.push("<b>SMH perdió su media de 50</b>: el líder indiscutido del año ("+f(smh.ytd,1)+"% en 2026) se quebró en el corto plazo — es la grieta más importante de vigilar");
+
+  document.getElementById("rgTxt").innerHTML=
+    "<b>Lectura:</b> "+(tot>=58?"cinco de los seis pilares apuntan a riesgo encendido, y lo más sano de todo es la amplitud — el S&P equiponderado (RSP) rinde "+f(rsp.ytd,1)+"% contra "+f(spy.ytd,1)+"% del índice normal, y las small caps (IWM) van "+f(iwm.ytd,1)+"%. Cuando la tropa completa sube y no solo las siete magníficas, el rally tiene piso.":"los pilares están mezclados: no hay señal limpia en ninguna dirección.")+
+    (alertas.length?"<br><br><b>Las banderas amarillas:</b> "+alertas.join("; ")+".":"");
+  return tot;
+}
+
+/* ══════════════════ PICKS ══════════════════ */
+function score(r){
+  var s=0;
+  s+=Math.min(r.v200,20)*1.4;                          // estructura de largo plazo
+  s+=Math.max(-10,Math.min(r.v50,8))*1.8;              // pulso corto (el beneficio se topa en 8%)
+  s+=Math.min(r.m1,12)*1.0;                            // momentum del mes
+  s+=r.cross==="golden"?12:-10;                        // confirmacion del cruce
+  s+=(r.rng-50)*.16;                                   // posicion en el rango anual
+  s-=Math.pow(Math.max(0,r.v50-5),1.35)*2.2;           // castigo por extension sobre la media de 50
+  s-=Math.max(0,r.ytd-25)*.7;                          // castigo por sobre-extension del año
+  s-=Math.max(0,r.vol-18)*.9;                          // castigo por volatilidad
+  s+=Math.max(0,18-r.vol)*.5;                          // premio a la relacion riesgo/retorno
+  return s;
+}
+function renderPicks(){
+  var univ=D.filter(function(r){return ["^VIX","^TNX","^GSPC","DX-Y.NYB","CLP=X"].indexOf(r.sym)<0});
+  var rank=univ.slice().sort(function(a,b){return score(b)-score(a)});
+  var worst=univ.slice().sort(function(a,b){return score(a)-score(b)});
+  var L=rank[0];
+  var T=rank.filter(function(r){return r!==L&&r.m1>4})[0]||rank[1];
+  var S=worst[0];
+  var razones={
+    "RSP":["<b>Es la jugada directa a lo único que está funcionando de verdad este año: la amplitud.</b> El S&P equiponderado rinde "+f(L.ytd,1)+"% contra +14,5% del S&P normal. Le está ganando al índice que todo el mundo compra, y le gana porque sube la tropa completa y no siete acciones.",
+      "<b>La volatilidad más baja de todo el radar de renta variable: "+L.vol.toFixed(1)+"%.</b> Rinde más que el S&P con dos tercios de su sobresalto. Esa relación es rarísima y no suele durar.",
+      "Estructura impecable: en el <b>máximo del año</b> (100% del rango), "+f(L.v200,1)+"% sobre su media de 200 y "+f(L.v50,1)+"% sobre la de 50 — fuerte pero <b>sin estar extendido</b>, que es justo lo que descalifica a energía hoy.",
+      "<b>Y protege del riesgo principal del índice:</b> el S&P normal depende de que Nvidia y Apple no se caigan (juntas pesan ~15%). Acá cada acción pesa lo mismo. Si el liderazgo de semiconductores se sigue quebrando — SMH ya perdió su media de 50 — esto lo siente mucho menos."],
+    "GDX":["<b>Subió +"+Math.abs(S.m1).toFixed(0)+"% en un mes y aun así es lo peor puntuado del radar.</b> Ahí está la trampa: la fuerza reciente no arregla una estructura rota.",
+      "Sigue con <b>cruce bajista</b>, "+f(S.fromHi,1)+"% bajo su máximo, y con una volatilidad de <b>"+S.vol.toFixed(0)+"%</b> — la más alta de todo el tablero, casi cinco veces la del S&P equiponderado.",
+      "Está <b>"+f(S.v50,1)+"% sobre su media de 50</b>. Entrar acá no es comprar una tendencia: es comprar el techo de un rebote vertical, en el activo que más rápido se devuelve cuando el rebote se agota.",
+      "El oro que hay detrás cuenta la misma historia: GLD subió 10% en el mes pero sigue 19% bajo su máximo y con cruce bajista. <b>El rebote es real; la tendencia todavía no existe.</b> Y XTB justo reporta que el minorista está volviendo al oro — que es históricamente el último en llegar."],
+    "EWJ":["Japón lleva <b>"+f(L.ytd,1)+"%</b> en el año con "+f(L.m1,1)+"% solo en el último mes, y cotiza prácticamente en el máximo de 52 semanas.",
+      "Estructura completa: cruce alcista, "+f(L.v200,1)+"% sobre la media de 200 y "+f(L.v50,1)+"% sobre la de 50 — con impulso pero sin la extensión que descalifica a energía.",
+      "<b>El punto ciego a vigilar es el yen.</b> Con el dólar/yen en 159 buena parte del retorno viene del tipo de cambio, no de las acciones. Si el Banco de Japón se mueve, ese viento a favor se puede dar vuelta rápido.",
+      "Es además una forma de estar fuera de EEUU sin irte a emergentes, que este año vienen flojos (China −8,5%, India −7,9%)."],
+    "EZU":["La Zona Euro está en <b>máximo del año</b> (100% del rango) con "+f(L.ytd,1)+"% acumulado y "+f(L.m1,1)+"% en el mes.",
+      "Estructura sólida: "+f(L.v200,1)+"% sobre la media de 200 con cruce alcista, y "+f(L.v50,1)+"% sobre la de 50.",
+      "El software europeo está sosteniendo los índices del continente cerca de máximos — no es un rally de un solo sector.",
+      "<b>Y cotiza mucho más barato que EEUU.</b> Estás comprando la misma tendencia alcista global sin pagar los múltiplos del Nasdaq."],
+    "XBI":["Biotecnología lleva <b>"+f(L.ytd,1)+"%</b> en el año y <b>"+f(L.y1,1)+"% en doce meses</b> — de los retornos más altos del radar.",
+      "Estructura fuerte: "+f(L.v200,1)+"% sobre la media de 200 con cruce alcista, "+f(L.m3,1)+"% en el trimestre.",
+      "Es el sector que más se beneficia de que la Fed deje de subir: son empresas que queman caja hoy para ganar en diez años más, y el crédito caro las castiga más que a nadie.",
+      "<b>Ojo con la volatilidad ("+L.vol.toFixed(0)+"%):</b> es casi el doble que la del S&P. Sube fuerte y corrige fuerte."],
+    "XLF":["Rezagado del año pero en máximos: rinde <b>"+f(L.ytd,1)+"%</b> contra <b>+14,5%</b> del S&P, y aun así cotiza en el <b>99% de su rango anual</b>. Fuerza sin sobre-extensión: la combinación más difícil de encontrar.",
+      "<b>La curva se está empinando a su favor.</b> El mercado ya descartó el alza de la Fed (30,6% de probabilidad para septiembre, contra 50% hace un mes) pero la tasa a 10 años sigue clavada en el techo del año. Prestar largo y fondearse corto se vuelve más rentable — es el negocio de un banco.",
+      "<b>La volatilidad más baja de todo el radar cíclico ("+L.vol.toFixed(1)+"%).</b> Sube igual que el resto pero con la mitad del sobresalto.",
+      "Trimestre de <b>"+f(L.m3,1)+"%</b> con cruce alcista intacto y "+f(L.v200,1)+"% sobre su media de 200."],
+    "IGV":["Cruce alcista <b>a punto de gatillarse</b>: la media de 50 está a menos de un 0,3% de cruzar la de 200 por arriba. El disparador clásico está justo ahí.",
+      "<b>+"+L.m1.toFixed(1)+"% en el último mes</b> y un trimestre de "+f(T.m3,1)+"%, después de un año entero rezagado ("+f(T.ytd,1)+"% en 2026).",
+      "La noticia acompaña: el software europeo está sosteniendo a los índices cerca de máximos históricos."],
+    "IWM":["<b>Máximo del año, literal:</b> cotiza en el 100% de su rango de 52 semanas.",
+      "Es <b>la prueba de la amplitud</b>: "+f(L.ytd,1)+"% en el año contra +14,5% del S&P. Las chicas le están ganando a las gigantes, y eso solo pasa en mercados sanos.",
+      "El dato de ventas minoristas flojo le juega a favor: menos presión de alzas de tasa es exactamente lo que necesita una small cap endeudada."],
+    "ITA":["<b>Máximo histórico</b> (100% del rango anual), con "+f(L.m1,1)+"% en el mes.",
+      "El driver es estructural, no de humor: conflicto en Ormuz, rearme global y capex de defensa que no depende del ciclo económico.",
+      "Nvidia acaba de declarar US$21.000 millones en SpaceX — el capex de IA se está derramando al espacio y la defensa."],
+    "XLE":["Líder absoluto del año: <b>"+f(L.ytd,1)+"%</b>, con "+f(L.w1,1)+"% solo en la última semana.",
+      "Brent en US$88,5 y la reserva estratégica de EEUU en niveles críticos — menos colchón para amortiguar cualquier shock.",
+      "<b>Cuidado:</b> está "+f(L.v50,1)+"% sobre su media de 50. Entrar acá es comprar extensión, no entrada."],
+    "XLI":["En <b>máximo del año</b> con "+f(L.ytd,1)+"% acumulado y estructura alcista completa.",
+      "Se lo lleva el capex de infraestructura de IA: capacidad eléctrica, construcción de centros de datos y defensa."],
+    "TLT":["<b>En el piso de su rango de 52 semanas ("+S.rng.toFixed(1)+"%).</b> No es un piso: es una caída sin freno.",
+      "Cruce bajista activo, "+f(S.v200,1)+"% bajo su media de 200 y "+f(S.ytd,1)+"% en el año.",
+      "<b>El motivo importa:</b> la tasa a 10 años sube aunque el mercado ya descartó el alza de la Fed. Eso es empinamiento por prima inflacionaria del petróleo, no por crecimiento — el peor escenario para un bono largo.",
+      "LarrainVial va en la misma dirección: se corrió a <b>duración corta y calidad</b>, con más UF por el riesgo inflacionario."],
+    "BTC-USD":["<b>"+f(S.ytd,1)+"% en el año</b> y "+f(S.fromHi,1)+"% bajo su máximo — el peor activo de todo el radar.",
+      "Cruce bajista, bajo ambas medias, y en el 11% inferior de su rango anual.",
+      "Es la señal más clara de que <b>esto no es un mercado de liquidez fácil</b>: con acciones en máximos, el activo más especulativo está en el subsuelo. La plata está siendo selectiva."],
+    "SLV":["<b>"+f(S.fromHi,1)+"% desde el máximo</b> y "+f(S.m3,1)+"% en el trimestre: el desplome más violento del radar.",
+      "Cruce bajista y "+f(S.v200,1)+"% bajo su media de 200.",
+      "El rebote de "+f(S.m1,1)+"% del último mes es contratendencia — no hay estructura que lo respalde todavía."],
+    "MCHI":["<b>"+f(S.ytd,1)+"% en el año</b>, en el 27% inferior de su rango y bajo ambas medias.",
+      "LarrainVial <b>redujo Asia</b> justamente por esto y movió esa ficha a Latinoamérica."],
+    "URA":["Rebote fuerte de "+f(S.m1,1)+"% en el mes con el uranio en máximos desde febrero, pero <b>sigue "+f(S.fromHi,1)+"% bajo su máximo</b> y bajo la media de 200.",
+      "Rebote, no tendencia: mientras no recupere la media de 200 y cruce, es un movimiento sin piso."]
+  };
+  var gen=function(r,tipo){
+    return razones[r.sym]||[
+      (tipo==="corto"?"Estructura rota: ":"Estructura sólida: ")+f(r.v200,1)+"% respecto de su media de 200, con cruce "+(r.cross==="golden"?"alcista":"bajista")+".",
+      "Momentum del último mes: <b>"+f(r.m1,1)+"%</b>. En el año acumula "+f(r.ytd,1)+"%.",
+      "Cotiza en el "+r.rng.toFixed(0)+"% de su rango de 52 semanas, con volatilidad de "+r.vol.toFixed(1)+"%."];
+  };
+  var box=function(r,klass,hd,badge,tipo){
+    var m=META[r.sym]||[r.sym,""];
+    return '<div class="pick '+klass+'"><div class="hd"><span>'+hd+'</span><span>'+badge+'</span></div><div class="bd">'+
+      '<div class="pk-tk">'+r.sym+'</div><div class="pk-nm">'+m[0]+'</div>'+
+      '<div class="pk-px">US$'+r.px.toLocaleString("es-CL",{maximumFractionDigits:2})+
+        ' <span class="'+cls(r.d1)+'">'+f(r.d1)+'%</span> <span style="color:var(--tx3)">hoy</span></div>'+
+      '<div class="pk-why"><ul><li>'+gen(r,tipo).join('</li><li>')+'</li></ul></div>'+
+      '<div class="lvl"><div><span>Invalidación</span>'+r.ma50.toLocaleString("es-CL",{maximumFractionDigits:2})+'</div>'+
+      '<div><span>Distancia</span><b class="'+cls(r.v50)+'">'+f(r.v50,1)+'%</b></div>'+
+      '<div><span>Volatilidad</span>'+r.vol.toFixed(1)+'%</div></div></div></div>';
+  };
+  document.getElementById("picks").innerHTML=
+    box(L,"pk-l","▲ El largo más limpio","posición principal","largo")+
+    box(T,"pk-t","◆ El táctico","satélite / plazo corto","largo")+
+    box(S,"pk-s","▼ De lo que me alejaría","evitar o cubrir","corto");
+
+  // tira de extremos
+  var mini=function(r){var m=META[r.sym]||[r.sym,""];
+    return '<span class="chip" title="'+m[0]+' · mes '+f(r.m1,1)+'% · vs media 200 '+f(r.v200,1)+'%">'+
+      r.sym+' <b class="'+cls(r.ytd)+'">'+f(r.ytd,1)+'%</b></span>'};
+  document.getElementById("extremos").innerHTML=
+    '<div style="display:flex;gap:22px;flex-wrap:wrap">'+
+    '<div><div style="font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--up);font-weight:700;margin-bottom:6px">Resto del podio</div>'+
+      '<div class="chips" style="margin:0">'+rank.slice(1,6).map(mini).join("")+'</div></div>'+
+    '<div><div style="font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--dn);font-weight:700;margin-bottom:6px">Los otros que evitaría</div>'+
+      '<div class="chips" style="margin:0">'+worst.slice(1,6).map(mini).join("")+'</div></div></div>';
+}
+
+/* ══════════════════ TABLA ══════════════════ */
+var sortK=null,sortA=false;
+function renderTabla(){
+  var tb=document.getElementById("tb"),h="";
+  var pinta=function(list){
+    list.forEach(function(r){
+      var m=META[r.sym]||[r.sym,""],L=vLargo(r),C=vCorto(r);
+      var esPct=["^VIX","^TNX"].indexOf(r.sym)>=0;
+      h+='<tr><td class="l"><div class="sym">'+r.sym+'</div><div class="nm">'+m[0]+'</div></td>'+
+        '<td>'+r.px.toLocaleString("es-CL",{maximumFractionDigits:2})+(esPct&&r.sym==="^TNX"?"%":"")+'</td>'+
+        ['d1','w1','m1','m3','ytd','y1'].map(function(k){
+          return '<td class="'+cls(r[k])+'">'+f(r[k],1)+'%</td>'}).join("")+
+        '<td class="'+cls(r.v50)+'">'+f(r.v50,1)+'%</td>'+
+        '<td class="'+cls(r.v200)+'">'+f(r.v200,1)+'%</td>'+
+        '<td class="'+(r.rng>80?"up":r.rng<25?"dn":"neu")+'">'+r.rng.toFixed(0)+'%</td>'+
+        '<td class="neu">'+r.vol.toFixed(1)+'%</td>'+
+        '<td class="l">'+L[0]+'</td><td class="l">'+C[0]+'</td></tr>';
+    });
+  };
+  if(sortK){
+    var s=D.slice().sort(function(a,b){var x=a[sortK],y=b[sortK];
+      if(typeof x==="string")return sortA?x.localeCompare(y):y.localeCompare(x);
+      return sortA?x-y:y-x});
+    pinta(s);
+  }else{
+    GRUPOS.forEach(function(g){
+      var list=D.filter(function(r){return (META[r.sym]||["",""])[1]===g[0]});
+      if(!list.length)return;
+      h+='<tr class="grp"><td colspan="14">'+g[1]+'</td></tr>';
+      pinta(list);
+    });
+  }
+  tb.innerHTML=h;
+}
+document.querySelectorAll("#tbl th[data-k]").forEach(function(th){
+  th.onclick=function(){var k=th.dataset.k;sortA=(sortK===k)?!sortA:false;sortK=k;renderTabla()};
+});
+
+/* ══════════════════ QUADRANT ══════════════════ */
+function renderQuad(){
+  var q=document.getElementById("quad");
+  var sel=D.filter(function(r){var g=(META[r.sym]||["",""])[1];return ["SEC","TEM","IDX","REG","MAT"].indexOf(g)>=0&&r.sym!=="^GSPC"});
+  var xs=sel.map(function(r){return r.v200}),ys=sel.map(function(r){return r.m1});
+  var xM=Math.max(Math.abs(Math.min.apply(null,xs)),Math.max.apply(null,xs))*1.15;
+  var yM=Math.max(Math.abs(Math.min.apply(null,ys)),Math.max.apply(null,ys))*1.2;
+  var h='<div class="ax" style="left:50%;top:0;bottom:0;width:1px"></div>'+
+        '<div class="ax" style="top:50%;left:0;right:0;height:1px"></div>'+
+        '<div class="qlab" style="right:12px;top:10px;color:var(--up)">▲ líderes</div>'+
+        '<div class="qlab" style="left:12px;top:10px;color:var(--acc)">rebotes ◆</div>'+
+        '<div class="qlab" style="right:12px;bottom:10px;color:var(--warn)">debilitándose ▼</div>'+
+        '<div class="qlab" style="left:12px;bottom:10px;color:var(--dn)">rezagados ✕</div>'+
+        '<div class="qlab" style="right:12px;top:50%;margin-top:6px">tendencia larga →</div>'+
+        '<div class="qlab" style="left:50%;top:8px;margin-left:8px">↑ momentum corto</div>';
+  sel.forEach(function(r){
+    var x=50+(r.v200/xM)*46, y=50-(r.m1/yM)*44;
+    x=Math.max(4,Math.min(96,x)); y=Math.max(5,Math.min(95,y));
+    var c=(r.v200>0&&r.m1>0)?"--up":(r.v200<0&&r.m1>0)?"--acc":(r.v200>0)?"--warn":"--dn";
+    var m=META[r.sym]||[r.sym,""];
+    h+='<div class="pt" style="left:'+x+'%;top:'+y+'%;color:var('+c+');border-color:var('+c+');'+
+       'background:rgba(0,0,0,.45)" title="'+m[0]+' — tendencia larga '+f(r.v200,1)+'% · mes '+f(r.m1,1)+'%">'+r.sym+'</div>';
+  });
+  q.innerHTML=h;
+}
+
+/* ══════════════════ CHILE ══════════════════ */
+function renderChile(){
+  var ech=get("ECH"),clp=get("CLP=X"),vwo=get("VWO"),ewz=get("EWZ");
+  document.getElementById("echYtd").textContent=f(ech.ytd,1)+"%";
+  document.getElementById("chileKv").innerHTML=
+    '<div class="kv"><span>IPSA en pesos (aprox. en el año)</span><span class="up">+5%</span></div>'+
+    '<div class="kv"><span>ECH · Chile en dólares</span><span class="'+cls(ech.ytd)+'">'+f(ech.ytd,1)+'%</span></div>'+
+    '<div class="kv"><span>Dólar / peso chileno</span><span class="'+cls(clp.ytd)+'">'+f(clp.ytd,1)+'% · $'+clp.px.toFixed(0)+'</span></div>'+
+    '<div class="kv"><span>ECH bajo su máximo del año</span><span class="dn">'+f(ech.fromHi,1)+'%</span></div>'+
+    '<div class="kv"><span>ECH · estructura de largo plazo</span><span class="dn">cruce bajista</span></div>'+
+    '<div class="kv"><span>Brasil (EWZ) en el año</span><span class="'+cls(ewz.ytd)+'">'+f(ewz.ytd,1)+'%</span></div>'+
+    '<div class="kv"><span>Emergentes (VWO) en el año</span><span class="'+cls(vwo.ytd)+'">'+f(vwo.ytd,1)+'%</span></div>';
+}
+
+/* ══════════════════ NOTICIAS CURADAS ══════════════════ */
+var NOTICIAS=[
+{f:"Reuters · XTB",fe:"14 ago",a:"dn",al:"wr",
+ t:"Las ventas minoristas en EEUU caen 0,6% en julio — primera baja en nueve meses",
+ b:"El dato llegó 0,7 puntos bajo lo esperado y es la mayor caída en 14 meses. Sin autos también cayó (−0,3%) cuando se esperaba +0,2%. La probabilidad de un alza de tasa en septiembre se desplomó de 50% a <b>30,6%</b>.",
+ i:"<b>Es la noticia más importante del tablero.</b> Un consumidor que se enfría le quita a la Fed cualquier excusa para subir tasas, y eso beneficia primero a lo que más sufre con el crédito caro: small caps, inmobiliario y bancos regionales. Pero tiene la otra cara — el consumo discrecional (XLY) es el único sector que rinde negativo en el año, y este dato explica por qué.",
+ ch:["IWM +24,5% año","XLY −0,6% año","XLRE +13,9%"]},
+{f:"CNBC",fe:"15 ago",a:"up",al:"wr",
+ t:"Irán desmiente a Trump sobre el Estrecho de Ormuz mientras reportan otro buque atacado",
+ b:"La tregua entre EEUU e Irán se rompió en julio y el conflicto se reactivó. El Brent está en US$88,5 (+1,67%) y llegó a rozar los US$100 en el peor momento.",
+ i:"Esto explica de una sola vez <b>dos cosas del tablero</b>: por qué energía (XLE) es el sector líder del año con +40,4%, y por qué la tasa a 10 años sigue pegada en el techo de su rango pese a que el mercado ya descartó nuevas alzas. El petróleo caro mete prima inflacionaria en el tramo largo de la curva — y eso es exactamente lo que está matando a los bonos largos.",
+ ch:["XLE +40,4%","Brent US$88,5","TLT −3,4%"]},
+{f:"CNBC",fe:"15 ago",a:"wr",al:"wr",
+ t:"La reserva estratégica de petróleo de EEUU se acerca al nivel que compromete las cavernas",
+ b:"El agotamiento de la reserva llega a un punto donde bajar más pondría en riesgo la integridad física de las cavernas de almacenamiento y su operación.",
+ i:"Es el complemento silencioso de la noticia anterior y casi nadie lo mira. Sin reserva estratégica, <b>EEUU pierde su herramienta para amortiguar un shock de oferta</b>. Deja de ser un tema de trading de corto plazo y pasa a ser un piso estructural bajo el crudo — y un techo estructural sobre las expectativas de inflación.",
+ ch:["XLE","DBC +34,2%","XLU"]},
+{f:"Yahoo Finance",fe:"15 ago",a:"up",al:"up",
+ t:"Las Siete Magníficas se estancan y las small caps toman el liderazgo del mercado",
+ b:"El ETF de las Siete Magníficas (MAGS) acumula −0,5% en el año, mientras las small caps de crecimiento rinden cerca de +17%. Por primera vez en más de una década, las mega-caps dejaron de ser el motor principal del alza.",
+ i:"Esto la data lo confirma sin ambigüedad: el <b>S&P equiponderado rinde +17,2% contra +14,5% del S&P normal</b>. Cuando el índice equiponderado le gana al ponderado por tamaño, significa que la mayoría de las acciones sube, no solo un puñado. Es la señal de amplitud más sana que hay, y es la razón principal por la que el termómetro marca riesgo encendido.",
+ ch:["RSP +17,2%","SPY +14,5%","IWM +24,5%"]},
+{f:"CNBC",fe:"15 ago",a:"up",al:"nu",
+ t:"Berkshire suma US$17.000 millones a su posición en Alphabet",
+ b:"Berkshire Hathaway amplió fuertemente su participación en Alphabet durante el trimestre.",
+ i:"Vale la pena leerlo contra el tablero: <b>comunicaciones (XLC) es el peor sector del año con −3,5%</b> y está bajo su media de 200 con cruce bajista. Que el inversionista de valor más conocido del mundo cargue justo ahí es la definición de comprar el rezagado. No es señal de compra — es una pista de dónde ve valor alguien con horizonte de década, no de mes.",
+ ch:["XLC −3,5%","XLC bajo media 200"]},
+{f:"CNBC",fe:"14 ago",a:"up",al:"nu",
+ t:"Nvidia declara una participación de US$21.000 millones en SpaceX",
+ b:"Nvidia reveló la posición al cierre del segundo trimestre.",
+ i:"El capex de inteligencia artificial <b>se está derramando fuera del centro de datos</b>: espacio, defensa e infraestructura energética. El tablero ya lo muestra — defensa (ITA) está en máximo histórico con +18,1% en el año e industriales (XLI) también en máximo con +20,9%. La historia de la IA dejó de ser solo semiconductores.",
+ ch:["ITA máximo","XLI máximo","SMH +63,2%"]},
+{f:"XTB",fe:"13 ago",a:"wr",al:"wr",
+ t:"El uranio alcanza su precio más alto desde febrero",
+ b:"El precio del uranio repuntó con fuerza hasta máximos de seis meses.",
+ i:"Ojo con esta: el ETF de uranio (URA) rebotó <b>+14,9% en un mes</b>, pero sigue <b>27,3% bajo su máximo</b> y por debajo de su media de 200 con cruce bajista. Es la diferencia exacta entre un rebote y un cambio de tendencia. Mientras no recupere la media de 200, cualquier entrada acá está comprando un rebote sin piso estructural.",
+ ch:["URA +14,9% mes","URA −27,3% del máximo","cruce bajista"]},
+{f:"XTB",fe:"13 ago",a:"wr",al:"wr",
+ t:"¿Están volviendo los inversionistas minoristas al oro?",
+ b:"XTB detecta señales de retorno del interés minorista hacia el oro tras la corrección.",
+ i:"Mismo diagnóstico que el uranio, y conviene tenerlo claro: el oro (GLD) subió <b>+10% en el último mes</b> y las mineras (GDX) volaron <b>+26%</b> — pero GLD sigue <b>19% bajo su máximo</b>, con cruce bajista y por debajo de su media de 200. El repunte es real, la tendencia todavía no. Cuando el minorista vuelve después de una caída de 19%, históricamente llega temprano o llega tarde, rara vez justo.",
+ ch:["GLD +10% mes","GDX +26% mes","GLD −19% del máximo"]},
+{f:"XTB",fe:"14 ago",a:"up",al:"up",
+ t:"El software europeo mantiene a los índices cerca de máximos históricos",
+ b:"Las acciones europeas de software sostuvieron a los índices del continente en zona de máximos durante la sesión.",
+ i:"Convergencia limpia entre noticia y gráfico: el ETF de software (IGV) lleva <b>+11,1% en el mes</b> y su media de 50 quedó a <b>menos de 0,3% de cruzar la de 200 por arriba</b>. Es el cruce alcista más inminente de todo el radar, en un sector que venía rezagado todo el año (−1,5%). Europa tampoco es casualidad: la Zona Euro (EZU) está en máximo del año con +14,3%.",
+ ch:["IGV +11,1% mes","cruce alcista inminente","EZU máximo"]},
+{f:"LarrainVial",fe:"10 ago",a:"nu",al:"nu",
+ t:"Visión de agosto: menos Asia, más Latinoamérica y duración corta en renta fija",
+ b:"LarrainVial redujo su sobreponderación en acciones asiáticas y aumentó exposición a Latinoamérica. En renta fija se movió a bonos de mayor calidad y menor duración, con más instrumentos en UF por el riesgo inflacionario del conflicto en Medio Oriente. El Banco Central de Chile mantuvo la tasa en 4,50%.",
+ i:"La data le da la razón en las dos patas. <b>Asia:</b> China (MCHI) rinde −8,5% en el año e India (INDA) −7,9%, ambos bajo su media de 200 con cruce bajista. <b>Duración corta:</b> los bonos largos (TLT) están en el 1,75% inferior de su rango de 52 semanas — prácticamente en el piso del año. Es de los pocos casos donde la recomendación institucional y el gráfico dicen exactamente lo mismo.",
+ ch:["MCHI −8,5%","INDA −7,9%","TLT en mínimos"]}
+];
+function renderCuradas(){
+  document.getElementById("curated").innerHTML=NOTICIAS.map(function(n){
+    var ic={up:"▲",dn:"▼",wr:"⚠",nu:"◆"}[n.al]||"◆";
+    return '<div class="ni a-'+n.a+'"><div class="ni-h"><div class="ni-t">'+n.t+'</div>'+
+      '<div class="ni-m">'+n.fe+'</div></div>'+
+      '<div class="ni-b"><span class="src">'+n.f+'</span>'+n.b+'</div>'+
+      '<div class="alert '+n.al+'"><span class="ic">'+ic+'</span><div><b>Qué significa para la decisión:</b> '+n.i+'</div></div>'+
+      '<div class="chips">'+n.ch.map(function(c){return '<span class="chip">'+c+'</span>'}).join("")+'</div></div>';
+  }).join("");
+}
+
+/* ══════════════════ MOTOR EN VIVO ══════════════════ */
+var PX="https://r.jina.ai/";
+function st(k,m){var d={live:"live",busy:"busy",err:"err",idle:""}[k];
+  document.getElementById("status").innerHTML='<span class="dot '+d+'"></span>'+m}
+function to(p,ms){return Promise.race([p,new Promise(function(_,x){setTimeout(function(){x(new Error("tiempo agotado"))},ms)})])}
+
+function calc(sym,closes,meta){
+  var P=closes.filter(function(v){return v!=null}),n=P.length;
+  if(n<60)return null;
+  var last=meta.regularMarketPrice||P[n-1];
+  var bk=function(k){return n-1-k>=0?(last/P[n-1-k]-1)*100:null};
+  var ma=function(k){if(n<k)return null;var s=0;for(var i=n-k;i<n;i++)s+=P[i];return s/k};
+  var old=get(sym);
+  var m50=ma(50),m200=ma(200);
+  var w=P.slice(Math.max(0,n-252)),hi=Math.max.apply(null,w),lo=Math.min.apply(null,w);
+  hi=Math.max(hi,last);lo=Math.min(lo,last);
+  var rs=[];for(var i=Math.max(1,n-20);i<n;i++)rs.push(Math.log(P[i]/P[i-1]));
+  var mu=rs.reduce(function(a,b){return a+b},0)/rs.length;
+  var sd=Math.sqrt(rs.reduce(function(a,b){return a+Math.pow(b-mu,2)},0)/Math.max(1,rs.length-1))*Math.sqrt(252)*100;
+  var R=function(x){return x==null||isNaN(x)?null:Math.round(x*100)/100};
+  return {sym:sym,px:R(last),
+    d1:R(meta.chartPreviousClose&&n>1?(last/P[n-2]-1)*100:bk(1)),
+    w1:R(bk(5)),m1:R(bk(21)),m3:R(bk(63)),m6:R(bk(126)),y1:R(bk(251)),
+    ytd:old?old.ytd:R(bk(160)),
+    ma50:R(m50),ma200:R(m200),v50:R(m50?(last/m50-1)*100:null),v200:R(m200?(last/m200-1)*100:null),
+    cross:(m50&&m200)?(m50>m200?"golden":"death"):null,
+    hi52:R(hi),lo52:R(lo),fromHi:R((last/hi-1)*100),rng:R((last-lo)/(hi-lo)*100),vol:R(sd)};
+}
+var MKT=null;
+async function live(){
+  var b=document.getElementById("btnLive");b.disabled=true;
+  var syms=SNAP.map(function(r){return r.sym}),lotes=[],i;
+  for(i=0;i<syms.length;i+=12)lotes.push(syms.slice(i,i+12));
+  var nuevos=[],fallas=0;
+  for(i=0;i<lotes.length;i++){
+    st("busy","bajando datos… lote "+(i+1)+" de "+lotes.length);
+    try{
+      var url=PX+"https://query1.finance.yahoo.com/v7/finance/spark?symbols="+
+        encodeURIComponent(lotes[i].join(","))+"&range=1y&interval=1d";
+      var r=await to(fetch(url),28000),t=await r.text();
+      var m=t.match(/\{[\s\S]*"spark"[\s\S]*\}/);
+      if(!m)throw new Error("respuesta ilegible");
+      var j=JSON.parse(m[0]);
+      (j.spark.result||[]).forEach(function(it){
+        var rs=it.response&&it.response[0];if(!rs)return;
+        var c=(rs.indicators&&rs.indicators.quote&&rs.indicators.quote[0]&&rs.indicators.quote[0].close)||null;
+        if(!c)return;
+        var o=calc(rs.meta.symbol,c,rs.meta);
+        // la fecha se ancla al mercado accionario: cripto y divisas operan fin de semana
+        if(o){nuevos.push(o); if(rs.meta.symbol==="SPY"&&rs.meta.regularMarketTime)MKT=rs.meta.regularMarketTime;}
+      });
+    }catch(e){fallas++}
+  }
+  if(nuevos.length>=20){
+    var map={};nuevos.forEach(function(o){map[o.sym]=o});
+    D=SNAP.map(function(o){return map[o.sym]||o});
+    LIVE=new Date();
+    pintarTodo();
+    var hh=LIVE.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
+    var fd=MKT?new Date(MKT*1000):null;
+    document.getElementById("asof").textContent=fd
+      ? "cierre "+fd.toLocaleDateString("es-CL",{day:"numeric",month:"long",year:"numeric"})
+      : "cierre más reciente";
+    st("live","datos al cierre · "+nuevos.length+" de "+syms.length+" instrumentos · bajado "+hh+(fallas?" · "+fallas+" lote(s) con error":""));
+  }else{
+    st("err","no se pudo actualizar — se mantiene el cierre del 14-ago");
+  }
+  b.disabled=false;
+}
+
+var FEEDS=[
+ ["CNBC","https://www.cnbc.com/id/100003114/device/rss/rss.html"],
+ ["CNBC Economía","https://www.cnbc.com/id/20910258/device/rss/rss.html"],
+ ["Yahoo Finance","https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US"],
+ ["MarketWatch","https://feeds.content.dowjones.io/public/rss/mw_marketpulse"]
+];
+/* diccionario de vigilancia: qué palabras delatan que una noticia toca cada instrumento */
+var KEYS={
+ "XLE":["oil","crude","opec","energy","iran","hormuz","petroleum","refinery","exxon","chevron","barrel","gas prices"],
+ "GLD":["gold","bullion","precious metal"],
+ "SLV":["silver"],
+ "GDX":["gold miner","mining","newmont","barrick"],
+ "URA":["uranium","nuclear","enrichment"],
+ "XLB":["copper","steel","aluminum","chemicals","commodit"],
+ "TLT":["fed","federal reserve","rate hike","rate cut","yield","treasury","bond","inflation","cpi","powell","fomc","interest rate"],
+ "SMH":["nvidia","chip","semiconductor","tsmc","amd","intel","micron","foundry"],
+ "XLK":["apple","microsoft","tech stock"," ai ","artificial intelligence","data center","cloud"],
+ "IGV":["software","saas","oracle","salesforce","adobe","palantir"],
+ "XLF":["bank","jpmorgan","goldman","citigroup","lender","credit card","financial"],
+ "IWM":["small-cap","small cap","russell 2000","russell"],
+ "XLY":["retail sales","consumer","amazon","tesla","restaurant","spending","nike"],
+ "XLP":["walmart","costco","procter","coca-cola","kraft","staples","grocery"],
+ "XLV":["health","pharma","drug","fda","biotech","medicare","insurer"],
+ "XBI":["biotech","clinical trial","fda approval"],
+ "ITA":["defense","military","pentagon","boeing","lockheed","spacex","missile","weapons"],
+ "XLI":["industrial","manufacturing","airline","railroad","caterpillar","factory"],
+ "XLU":["utility","utilities","electricity","power grid"],
+ "XLRE":["housing","real estate","mortgage","reit","home sales"],
+ "XLC":["alphabet","google","meta","disney","netflix","streaming","advertising"],
+ "BTC-USD":["bitcoin","crypto","ethereum","blockchain","stablecoin"],
+ "MCHI":["china","chinese","beijing","alibaba","hong kong"],
+ "EWJ":["japan","japanese","yen","nikkei","boj"],
+ "EZU":["europe","euro zone","ecb","germany","france"],
+ "INDA":["india","indian","rupee"],
+ "EWZ":["brazil","brazilian","petrobras","real"],
+ "ECH":["chile","chilean","lithium","sqm","codelco"],
+ "SPY":["s&p 500","s&p500","wall street","stock market"],
+ "QQQ":["nasdaq"],
+ "DX-Y.NYB":["dollar","currency","forex"],
+ "DBC":["commodities","tariff"]
+};
+/* indice invertido palabra -> ticker (compat) */
+var WATCH={};for(var _k in KEYS)KEYS[_k].forEach(function(w){if(!WATCH[w])WATCH[w]=_k});
+var BUZZ={};
+async function news(){
+  var b=document.getElementById("btnNews");b.disabled=true;
+  var box=document.getElementById("livenews");
+  box.innerHTML='<div style="color:var(--tx3);font-size:12.5px">Bajando titulares…</div>';
+  var items=[];
+  for(var i=0;i<FEEDS.length;i++){
+    try{
+      var r=await to(fetch(PX+FEEDS[i][1]),25000),t=await r.text();
+      var re=/###\s*\[([^\]]{15,190})\]\(([^)\s]+)\)/g,m;
+      var c=0;
+      while((m=re.exec(t))!==null&&c<9){items.push({f:FEEDS[i][0],t:m[1].trim(),u:m[2]});c++}
+    }catch(e){}
+  }
+  if(!items.length){
+    box.innerHTML='<div style="color:var(--warn);font-size:12.5px">No se pudieron traer los titulares '+
+      '(el proveedor puede estar limitando el tráfico). El análisis curado de más arriba sigue vigente.</div>';
+    b.disabled=false;return;
+  }
+  BUZZ={};
+  box.innerHTML=items.map(function(n){
+    var low=n.t.toLowerCase(),hits=[];
+    for(var s in KEYS){
+      for(var i=0;i<KEYS[s].length;i++){
+        if(low.indexOf(KEYS[s][i])>=0){
+          if(hits.indexOf(s)<0)hits.push(s);
+          BUZZ[s]=BUZZ[s]||{n:0,tit:[]};
+          if(BUZZ[s].tit.indexOf(n.t)<0){BUZZ[s].n++;BUZZ[s].tit.push(n.t)}
+          break;
+        }
+      }
+    }
+    var afecta=hits.slice(0,3).map(function(s){
+      var r=get(s);return r?'<span class="chip">'+s+' '+f(r.ytd,1)+'% año</span>':'<span class="chip">'+s+'</span>'}).join("");
+    return '<div class="lnw'+(hits.length?' hit':'')+'"><a href="'+n.u+'" target="_blank" rel="noopener">'+
+      (hits.length?'⚠ ':'')+n.t+'</a><div class="mt"><span class="src">'+n.f+'</span>'+
+      (hits.length?'toca en el radar:':'sin impacto directo en el radar')+'</div>'+
+      (hits.length?'<div class="chips">'+afecta+'</div>':'')+'</div>';
+  }).join("");
+  renderBuzz(items.length);
+  var alertadas=box.querySelectorAll(".lnw.hit").length;
+  st(LIVE?"live":"idle",(LIVE?"datos al cierre · ":"cierre 14-ago · ")+items.length+" titulares · "+alertadas+" con alerta");
+  b.disabled=false;
+}
+
+/* ── contador de menciones por instrumento ── */
+function renderBuzz(totalTit){
+  var el=document.getElementById("buzz");
+  var arr=[];for(var s in BUZZ)arr.push({sym:s,n:BUZZ[s].n,tit:BUZZ[s].tit});
+  if(!arr.length){el.innerHTML='<div style="color:var(--tx3);font-size:12.5px">Sin menciones detectadas en esta tanda de titulares.</div>';return}
+  arr.sort(function(a,b){return b.n-a.n});
+  var max=arr[0].n;
+  var lider=arr[0];
+  var filas=arr.slice(0,14).map(function(o){
+    var r=get(o.sym),m=META[o.sym]||[o.sym,""];
+    var w=Math.max(6,(o.n/max)*100);
+    var mv=r?r.m1:null;
+    return '<div class="bz" title="'+o.tit.slice(0,4).join(" · ").replace(/"/g,"'")+'">'+
+      '<div class="bz-s">'+o.sym+'</div>'+
+      '<div class="bz-n">'+m[0]+'</div>'+
+      '<div class="bz-b"><i style="width:'+w+'%;background:'+(mv>0?"var(--up)":mv<0?"var(--dn)":"var(--tx3)")+'"></i>'+
+        '<b>'+o.n+'</b></div>'+
+      '<div class="bz-m '+cls(mv)+'">'+f(mv,1)+'%</div></div>';
+  }).join("");
+
+  // divergencias: mucha noticia y poco movimiento, o al reves
+  var conMov=arr.filter(function(o){return get(o.sym)}).map(function(o){
+    var r=get(o.sym);return {sym:o.sym,n:o.n,mv:Math.abs(r.m1),m1:r.m1}});
+  var ruido=conMov.filter(function(o){return o.n>=2&&o.mv<2}).sort(function(a,b){return b.n-a.n})[0];
+  var silen=conMov.filter(function(o){return o.n<=1&&o.mv>6}).sort(function(a,b){return b.mv-a.mv})[0];
+  var notas=[];
+  notas.push("El foco de la prensa está en <b>"+lider.sym+"</b> ("+(META[lider.sym]||["",""])[0].toLowerCase()+") con <b>"+lider.n+
+    " de "+totalTit+" titulares</b>"+(get(lider.sym)?", y el precio acompaña con "+f(get(lider.sym).m1,1)+"% en el mes":"")+".");
+  if(ruido)notas.push("<b>Mucho ruido, poco movimiento:</b> "+ruido.sym+" acumula "+ruido.n+
+    " menciones pero se movió apenas "+f(ruido.m1,1)+"% en el mes — la noticia ya está en el precio, o el mercado no le cree.");
+  if(silen)notas.push("<b>Se movió en silencio:</b> "+silen.sym+" hizo "+f(silen.m1,1)+
+    "% en el mes casi sin cobertura. Los movimientos que nadie está contando suelen ser los más interesantes de revisar.");
+  document.getElementById("buzzNota").innerHTML=notas.join(" ");
+  el.innerHTML=filas;
+}
+
+/* ══════════════════ INIT ══════════════════ */
+function pintarTodo(){regimen();renderPicks();renderTabla();renderQuad();renderChile()}
+pintarTodo();renderCuradas();
+document.getElementById("btnLive").onclick=live;
+document.getElementById("btnNews").onclick=news;
+</script>
+</body>
+</html>

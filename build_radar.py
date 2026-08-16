@@ -55,7 +55,9 @@ UNIVERSO = {
     "XBI": ("Biotecnología", "TEM"), "ARKK": ("Innovación disruptiva", "TEM"),
     # renta fija
     "TLT": ("Bonos EEUU 20+ años", "RF"), "IEF": ("Bonos EEUU 7-10 años", "RF"),
+    "IEI": ("Bonos EEUU 3-7 años", "RF"),   # duracion ~4,4: contrapartida de HYG
     "LQD": ("Deuda grado inversión", "RF"), "HYG": ("Deuda alto rendimiento", "RF"),
+    "SPHB": ("S&P alta beta", "TEM"), "SPLV": ("S&P baja volatilidad", "TEM"),
     # materias primas
     "GLD": ("Oro", "MAT"), "SLV": ("Plata", "MAT"), "GDX": ("Mineras de oro", "MAT"),
     "DBC": ("Canasta de materias primas", "MAT"),
@@ -128,8 +130,8 @@ def bajar(sym: str, reintentos: int = 3):
             # recorta esa cola, el retorno del dia sale comparando el precio real
             # contra un cierre de hace un mes y aparecen saltos falsos de +13%.
             congeladas = 1
-            for i in range(len(pares) - 1, 0, -1):
-                if pares[i][1] == pares[i - 1][1]:
+            for k in range(len(pares) - 1, 0, -1):
+                if pares[k][1] == pares[k - 1][1]:
                     congeladas += 1
                 else:
                     break
@@ -205,25 +207,89 @@ def metricas(sym: str, d: dict) -> dict | None:
         "moneda": d["meta"].get("currency"),
     }
 
+def bajar_vix3m():
+    """VIX3M desde el CDN de CBOE. Yahoo tiene ^VIX3M congelado, y el nivel del
+    VIX solo no distingue regimen: la estructura de plazos si."""
+    try:
+        url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX3M_History.csv"
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            filas = [l for l in r.read().decode("utf-8", "replace").strip().splitlines() if l]
+        for linea in reversed(filas[1:]):
+            partes = linea.split(",")
+            if len(partes) >= 5:
+                try:
+                    return float(partes[4])
+                except ValueError:
+                    continue
+    except Exception as e:
+        log(f"  ! VIX3M: {type(e).__name__}")
+    return None
+
 # ─────────────────────────── termometro ───────────────────────────
-def termometro(M: dict) -> dict:
+def termometro(M: dict, vix3m: float | None = None) -> dict:
     g = M.get
-    spy, rsp, vix = g("^GSPC") or g("SPY"), g("RSP"), g("^VIX")
-    hyg, lqd, tnx = g("HYG"), g("LQD"), g("^TNX")
-    xly, xlp, xle = g("XLY"), g("XLP"), g("XLE")
-    if not all([spy, rsp, vix, hyg, lqd, tnx, xly, xlp, xle]):
+    spy, vix, tnx = g("^GSPC") or g("SPY"), g("^VIX"), g("^TNX")
+    hyg, iei, lqd = g("HYG"), g("IEI"), g("LQD")
+    xly, xlp = g("XLY"), g("XLP")
+    if not all([spy, vix, tnx, hyg, xly, xlp]):
         return {"score": None, "pilares": [], "nota": "faltan datos para el termómetro"}
     cl = lambda x: max(0.0, min(100.0, x))
     P = []
+
+    # 1 TENDENCIA — precio vs media de 200 (Faber 2007). El pilar mejor fundado.
     P.append(("Tendencia", "S&P vs media 200", spy["v200"], cl(50 + spy["v200"] * 4.5)))
-    amp = rsp["ytd"] - spy["ytd"]
-    P.append(("Amplitud", "Equiponderado vs índice", amp, cl(50 + amp * 7)))
-    P.append(("Volatilidad", f"VIX {vix['px']:.2f}", vix["px"], cl(100 - (vix["px"] - 10) * 4)))
-    cr = hyg["m3"] - lqd["m3"]
-    P.append(("Crédito", "Alto rendimiento vs grado inv.", cr, cl(50 + cr * 13)))
+
+    # 2 AMPLITUD — participacion real: % de ETFs de acciones EEUU sobre su propia
+    # media de 200. Reemplaza a "RSP menos SPY en el año", que estaba INVERTIDO:
+    # daba 98,7/100 en 2022 (año bajista, SPY -18,6%) y 0/100 en 2023 y 2024
+    # (dos años de +25%). El defecto es estructural: cuando las mega-caps lideran
+    # la caida, el equiponderado gana, y el pilar lo leia como salud.
+    univ = [r for r in M.values()
+            if r["grupo"] in ("SEC", "IDX", "TEM") and r.get("v200") is not None]
+    if len(univ) >= 10:
+        pct = sum(1 for r in univ if r["v200"] > 0) / len(univ) * 100
+        P.append(("Amplitud", f"{sum(1 for r in univ if r['v200']>0)} de {len(univ)} sobre su media 200",
+                  round(pct, 1), cl(pct)))
+
+    # 3 VOLATILIDAD — estructura de plazos VIX/VIX3M por sobre el nivel suelto.
+    # Bajo 1 el mercado paga menos por proteccion a 30 dias que a 90 (calma);
+    # sobre 1 hay miedo con fecha. Se autoajusta al regimen de volatilidad.
+    if vix3m and vix3m > 0:
+        ratio = vix["px"] / vix3m
+        P.append(("Volatilidad", f"VIX/VIX3M {ratio:.2f}", round(ratio, 3),
+                  cl(50 + (1.0 - ratio) * 200)))
+    else:
+        P.append(("Volatilidad", f"VIX {vix['px']:.2f}", vix["px"], cl(100 - (vix["px"] - 10) * 4)))
+
+    # 4 CREDITO — HYG contra Treasuries de DURACION PARECIDA (IEI, ~4,4 años).
+    # Antes se comparaba contra LQD, que dura ~8,0 contra los ~3,0 de HYG: esa
+    # brecha de 5 años hacia que el pilar midiera movimientos de TASA disfrazados
+    # de estres crediticio. Una baja de 50pb de tasas movia el pilar 32 puntos
+    # sin que se moviera un solo punto base de spread.
+    ref = iei or lqd
+    cr = hyg["m3"] - ref["m3"]
+    P.append(("Crédito", f"Alto rendimiento vs Treasury {'3-7a' if iei else '(referencia larga)'}",
+              round(cr, 2), cl(50 + cr * 20)))
+
+    # 5 TASAS LARGAS
     P.append(("Tasas largas", "Bono EEUU 10 años", tnx["px"], cl(100 - tnx["rng"])))
-    cd = (xly["m3"] + xle["m3"]) / 2 - xlp["m3"]
-    P.append(("Apetito", "Cíclicos vs defensivos", cd, cl(50 + cd * 5)))
+
+    # 6 APETITO — canasta de pares ofensivo/defensivo. Se saco XLE: energia es un
+    # trade de inflacion, no del ciclo, y dejaba el pilar clavado en 100/100 en
+    # 2021, 2022 y 2023 — incluido 2022, cuando el S&P cayo 18,6% con XLE +59%.
+    pares, det = [], []
+    for ofensivo, defensivo, etq in (("SPHB", "SPLV", "alta beta/baja vol"),
+                                     ("XLY", "XLP", "discrecional/básico"),
+                                     ("IWM", "SPY", "small/large"),
+                                     ("SMH", "SPY", "semis/mercado")):
+        a, b = g(ofensivo), g(defensivo)
+        if a and b and a.get("m3") is not None and b.get("m3") is not None:
+            pares.append(a["m3"] - b["m3"]); det.append(etq)
+    if pares:
+        cd = sum(pares) / len(pares)
+        P.append(("Apetito", f"{len(pares)} pares ofensivo/defensivo", round(cd, 2), cl(50 + cd * 5)))
+
     score = round(sum(p[3] for p in P) / len(P))
     etq = ("RIESGO ENCENDIDO" if score >= 72 else
            "RIESGO ENCENDIDO · con reparos" if score >= 58 else
@@ -233,71 +299,106 @@ def termometro(M: dict) -> dict:
             "pilares": [{"t": a, "sub": b, "val": round(c, 2), "score": round(d)} for a, b, c, d in P]}
 
 # ─────────────────────────── ranking ───────────────────────────
-def puntaje(r: dict) -> float:
-    if r["v200"] is None or r["v50"] is None or r["m1"] is None or r["vol"] is None:
-        return -999.0
-    s = 0.0
-    s += min(r["v200"], 20) * 1.4
-    s += max(-10, min(r["v50"], 8)) * 1.8
-    s += min(r["m1"], 12) * 1.0
-    s += 12 if r["cross"] == "golden" else -10
-    s += ((r["rng"] or 50) - 50) * .16
-    s -= max(0.0, r["v50"] - 5) ** 1.35 * 2.2
-    s -= max(0.0, (r["ytd"] or 0) - 25) * .7
-    s -= max(0.0, r["vol"] - 18) * .9
-    s += max(0.0, 18 - r["vol"]) * .5
+def puntaje(r: dict):
+    """Momentum multi-horizonte 13612W (Keller & Keuning) con gate de tendencia
+    absoluta. Reemplaza a la version anterior, que castigaba la distancia sobre
+    la media de 50 y el retorno del año: backtest sobre este mismo universo dio
+    9,41% anual contra 15,09% de esta, y por debajo de solo comprar SPY (14,89%).
+    El castigo era ademas la señal de Avramov-Kaplanski-Subrahmanyam (RFE 2021)
+    con el signo invertido, y se volvia dominante — a 20% sobre la media de 50
+    restaba 85 puntos cuando el techo positivo del modelo entero era 74."""
+    if any(r.get(k) is None for k in ("v200", "m1", "m3", "m6", "y1")):
+        return None
+    if r["v200"] <= 0 or r["y1"] <= 0:      # gate binario: sin tendencia, no compite
+        return None
+    s = (12 * r["m1"] + 4 * r["m3"] + 2 * r["m6"] + 1 * r["y1"]) / 4
+    s += ((r["rng"] or 50) - 50) * 0.10     # cercania al maximo de 52s (George & Hwang 2004)
     return round(s, 1)
 
-# ─────────────────────────── alertas ───────────────────────────
-UMBRALES = {"mov_dia": 4.0, "mov_dia_accion": 7.0, "vix_salto": 25.0,
-            "vix_nivel": 25.0, "term_piso": 50, "term_techo": 70}
+def peso_sugerido(rs: list) -> dict:
+    """La volatilidad ya no entra al puntaje: define el tamaño. w proporcional a 1/vol."""
+    inv = {r["sym"]: 1.0 / r["vol"] for r in rs if r.get("vol")}
+    tot = sum(inv.values()) or 1.0
+    return {s: round(v / tot * 100, 1) for s, v in inv.items()}
 
-def detectar_alertas(M: dict, term: dict, prev: dict | None) -> list[dict]:
+# ─────────────────────────── alertas ───────────────────────────
+# Umbral de movimiento diario en SIGMAS del propio instrumento, no en % fijo.
+# Un 4% fijo disparaba 218 alertas al año y significaba 0,4 sigmas en un ETF y
+# 10,9 en otro: la misma alerta para un no-evento y para una catastrofe.
+# A 4 sigmas quedan 38 al año, y sirve igual para XLU que para SQM-B.
+UMBRALES = {"sigmas_dia": 4.0, "vix_nivel": 25.0,
+            "banda_ma200": 2.0,                 # histeresis: sin banda hay 8 cruces/año por ETF
+            "term_entra": 70, "term_sale": 60,  # histeresis del termometro
+            "term_cae": 40, "term_vuelve": 50}
+
+def _estado_ma(prev_est, v200, banda):
+    """Estado con histeresis. Solo cambia cuando el precio pasa la banda entera
+    del lado contrario, no cada vez que roza la linea."""
+    est = prev_est or ("arriba" if v200 > 0 else "abajo")
+    if est == "arriba" and v200 < -banda:
+        return "abajo", True
+    if est == "abajo" and v200 > banda:
+        return "arriba", True
+    return est, False
+
+def detectar_alertas(M: dict, term: dict, prev: dict | None) -> tuple[list[dict], dict]:
     A = []
     p_term = (prev or {}).get("termometro")
     p_inst = (prev or {}).get("inst", {})
+    p_est = (prev or {}).get("estado", {})
+    p_reg = (prev or {}).get("regimen_alto")
     sc = term.get("score")
+    estados, reg_alto = {}, p_reg
 
-    if p_term is not None and sc is not None:
-        if p_term >= UMBRALES["term_piso"] > sc:
-            A.append({"n": 3, "t": "El termómetro cayó bajo 50",
-                      "d": f"pasó de {p_term} a {sc}. El mercado dejó de estar en modo riesgo encendido."})
-        elif p_term < UMBRALES["term_techo"] <= sc:
-            A.append({"n": 1, "t": "El termómetro superó 70",
-                      "d": f"pasó de {p_term} a {sc}. Régimen de riesgo encendido pleno."})
+    if sc is not None:
+        if p_reg is not True and sc >= UMBRALES["term_entra"]:
+            reg_alto = True
+            A.append({"n": 1, "t": f"El termómetro entró en riesgo encendido pleno ({sc})",
+                      "d": f"cruzó {UMBRALES['term_entra']}" + (f" desde {p_term}" if p_term else "") + "."})
+        elif p_reg is True and sc < UMBRALES["term_sale"]:
+            reg_alto = False
+            A.append({"n": 2, "t": f"El termómetro salió del régimen alto ({sc})",
+                      "d": f"cayó bajo {UMBRALES['term_sale']}" + (f" desde {p_term}" if p_term else "") + "."})
+        if p_term is not None and p_term >= UMBRALES["term_vuelve"] and sc < UMBRALES["term_cae"]:
+            A.append({"n": 3, "t": f"El termómetro se desplomó a {sc}",
+                      "d": f"venía en {p_term}. El mercado se puso defensivo de golpe."})
 
     vix = M.get("^VIX")
-    if vix:
-        if vix["d1"] and vix["d1"] >= UMBRALES["vix_salto"]:
-            A.append({"n": 3, "t": f"El VIX saltó {vix['d1']:+.1f}% en un día",
-                      "d": f"quedó en {vix['px']:.2f}. Entró miedo al sistema."})
-        elif vix["px"] >= UMBRALES["vix_nivel"] and (p_inst.get("^VIX", {}).get("px", 0) < UMBRALES["vix_nivel"]):
-            A.append({"n": 2, "t": f"El VIX cruzó 25 ({vix['px']:.2f})", "d": "volatilidad en zona de estrés."})
+    if vix and vix["px"] >= UMBRALES["vix_nivel"] > p_inst.get("^VIX", {}).get("px", 0):
+        # el salto porcentual de un dia se saco: los spikes del VIX revierten y
+        # generaban alertas que no sobrevivian a la sesion siguiente.
+        A.append({"n": 2, "t": f"El VIX cruzó {UMBRALES['vix_nivel']:.0f} ({vix['px']:.2f})",
+                  "d": "volatilidad en zona de estrés."})
 
     for sym, r in M.items():
-        if r["grupo"] == "MAC" or r["v200"] is None:
+        if r["v200"] is None:
             continue
-        ant = p_inst.get(sym)
         nom = r["nombre"]
-        if ant and ant.get("v200") is not None:
-            if ant["v200"] >= 0 > r["v200"]:
-                A.append({"n": 2, "t": f"{sym} perdió su media de 200",
-                          "d": f"{nom} quebró la tendencia de largo plazo ({r['v200']:+.1f}%)."})
-            elif ant["v200"] < 0 <= r["v200"]:
-                A.append({"n": 1, "t": f"{sym} recuperó su media de 200",
-                          "d": f"{nom} vuelve a tendencia alcista de largo plazo ({r['v200']:+.1f}%)."})
-            if ant.get("cross") and r["cross"] and ant["cross"] != r["cross"]:
-                alcista = r["cross"] == "golden"
-                A.append({"n": 1 if alcista else 2,
-                          "t": f"{sym}: cruce {'alcista' if alcista else 'bajista'} confirmado",
-                          "d": f"{nom} — la media de 50 cruzó {'sobre' if alcista else 'bajo'} la de 200."})
-        # una accion suelta se mueve mucho mas que un ETF: el umbral no puede ser el mismo
-        umbral = UMBRALES["mov_dia_accion"] if r["grupo"] == "CL" else UMBRALES["mov_dia"]
-        if r["d1"] is not None and not r.get("rezago") and abs(r["d1"]) >= umbral:
-            A.append({"n": 2, "t": f"{sym} se movió {r['d1']:+.1f}% en el día",
-                      "d": f"{nom} — movimiento fuera de lo normal."})
+        est, cambio = _estado_ma(p_est.get(sym), r["v200"], UMBRALES["banda_ma200"])
+        estados[sym] = est
+        if r["grupo"] == "MAC":
+            continue
+        if cambio and p_est.get(sym):
+            arriba = est == "arriba"
+            A.append({"n": 1 if arriba else 2,
+                      "t": f"{sym} {'recuperó' if arriba else 'perdió'} su media de 200",
+                      "d": f"{nom} — {r['v200']:+.1f}%, cruzando la banda de "
+                           f"±{UMBRALES['banda_ma200']:.0f}% que filtra el ruido."})
+        ant = p_inst.get(sym)
+        if ant and ant.get("cross") and r["cross"] and ant["cross"] != r["cross"]:
+            alcista = r["cross"] == "golden"
+            A.append({"n": 1 if alcista else 2,
+                      "t": f"{sym}: cruce {'alcista' if alcista else 'bajista'} confirmado",
+                      "d": f"{nom} — la media de 50 cruzó {'sobre' if alcista else 'bajo'} la de 200."})
+        # movimiento del dia medido contra la volatilidad del propio instrumento
+        if r["d1"] is not None and not r.get("rezago") and r.get("vol"):
+            sigma = r["vol"] / math.sqrt(252)
+            if sigma > 0 and abs(r["d1"]) / sigma >= UMBRALES["sigmas_dia"]:
+                A.append({"n": 2, "t": f"{sym} se movió {r['d1']:+.1f}% en el día",
+                          "d": f"{nom} — {abs(r['d1'])/sigma:.1f} sigmas contra su propia "
+                               f"volatilidad. Fuera de lo normal para este instrumento."})
     A.sort(key=lambda x: x["n"])
-    return A[:12]
+    return A[:12], {"estado": estados, "regimen_alto": reg_alto}
 
 # ─────────────────────────── calendario ───────────────────────────
 def calendario(hoy: dt.date) -> list[dict]:
@@ -429,7 +530,9 @@ def main():
         log("  ! muy pocos datos, aborto sin escribir")
         return 1
 
-    term = termometro(M)
+    v3m = bajar_vix3m()
+    if v3m: log(f"  VIX3M {v3m:.2f} (CBOE)")
+    term = termometro(M, v3m)
 
     # fecha de mercado anclada a SPY (cripto y divisas operan fin de semana)
     ts = (M.get("SPY") or {}).get("fecha")
@@ -443,16 +546,23 @@ def main():
             hist = []
     prev = hist[-1] if hist and hist[-1].get("fecha") != fmkt else (hist[-2] if len(hist) > 1 else None)
 
-    alertas = detectar_alertas(M, term, prev)
+    alertas, estado = detectar_alertas(M, term, prev)
 
-    rk = sorted([r for r in M.values() if r["grupo"] not in ("MAC", "CL")],
-                key=puntaje, reverse=True)
-    rk = [r for r in rk if puntaje(r) > -900]
     for r in M.values():
         r["puntaje"] = puntaje(r)
+    rk = sorted([r for r in M.values()
+                 if r["grupo"] not in ("MAC", "CL") and r["puntaje"] is not None],
+                key=lambda r: r["puntaje"], reverse=True)
+    pesos = peso_sugerido(rk[:8])
+    for r in rk:
+        r["peso"] = pesos.get(r["sym"])
 
     entrada = {"fecha": fmkt, "ts": int(time.time()), "termometro": term["score"],
                "pilares": {p["t"]: p["score"] for p in term["pilares"]},
+               # los CRUDOS son los que permiten recalcular si cambia una formula;
+               # el score ya normalizado es irrecuperable
+               "crudos": {p["t"]: p["val"] for p in term["pilares"]},
+               "estado": estado["estado"], "regimen_alto": estado["regimen_alto"],
                "inst": {s: {"px": r["px"], "v200": r["v200"], "v50": r["v50"],
                             "cross": r["cross"], "ytd": r["ytd"]} for s, r in M.items()}}
     hist = [h for h in hist if h.get("fecha") != fmkt] + [entrada]
@@ -470,9 +580,11 @@ def main():
         "serie_termometro": serie[-120:],
         "instrumentos": list(M.values()),
         "ranking": [r["sym"] for r in rk],
+        "pesos": pesos,
         "alertas": alertas,
         "calendario": cal,
         "lv_sobreponderar": [s for s in LV_SOBREPONDERAR if s in M],
+        "vix3m": v3m,
         "fallidos": fallidos,
     }
     json.dump(datos, open(DATOS, "w", encoding="utf-8"), ensure_ascii=False)

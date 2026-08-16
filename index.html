@@ -15,7 +15,8 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);
   font-family:-apple-system,"Segoe UI",Inter,system-ui,sans-serif;font-size:14px;line-height:1.5}
-.wrap{max-width:1500px;margin:0 auto;padding:20px 22px 70px}
+.wrap{max-width:1500px;margin:0 auto;padding:20px 22px 70px;overflow-x:hidden}
+html,body{max-width:100%;overflow-x:hidden}
 a{color:var(--acc);text-decoration:none}
 a:hover{text-decoration:underline}
 
@@ -69,6 +70,7 @@ h2::after{content:"";flex:1;height:1px;background:var(--line)}
 /* ---------- tables ---------- */
 .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg2)}
 table{border-collapse:collapse;width:100%;font-size:13px;min-width:940px}
+.tblwrap{max-width:100%}
 th{background:var(--bg3);color:var(--tx3);font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;
   text-align:right;padding:10px 11px;font-weight:700;position:sticky;top:0;white-space:nowrap;
   border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
@@ -508,9 +510,45 @@ function vCorto(r){
 }
 
 /* ══════════════════ TERMOMETRO ══════════════════ */
+function colorTerm(t){return t>=72?"var(--up)":t>=58?"var(--up)":t>=42?"var(--warn)":t>=28?"var(--hot)":"var(--dn)"}
+function pintarTermometro(tot,lab,P){
+  var col=colorTerm(tot);
+  document.getElementById("rgNum").textContent=tot;
+  document.getElementById("rgNum").style.color=col;
+  document.getElementById("rgLab").textContent=lab;
+  document.getElementById("rgLab").style.color=col;
+  document.getElementById("rgBar").style.width=tot+"%";
+  document.getElementById("rgBar").style.background=col;
+  document.getElementById("pillars").innerHTML=P.map(function(p){
+    return '<div class="pil"><div class="t">'+p[0]+'</div><div class="v '+p[3]+'">'+p[2]+
+      '<span style="font-size:11px;color:var(--tx3);font-weight:400"> · '+p[5]+'/100</span></div>'+
+      '<div class="d" style="color:var(--tx3);font-size:10.5px;margin-bottom:4px">'+p[1]+'</div>'+
+      '<div class="d">'+p[4]+'</div></div>';
+  }).join("");
+}
+var GLOSA={
+ "Tendencia":"Precio del índice contra su piso estructural de 200 sesiones. Es el pilar mejor documentado (Faber, 2007).",
+ "Amplitud":"Cuántos ETFs de acciones de EEUU están sobre su propia media de 200. Participación real: si sube la tropa completa, el rally tiene piso.",
+ "Volatilidad":"VIX contra VIX3M. Bajo 1 el mercado paga menos por protección a 30 días que a 90 — calma. Sobre 1, miedo con fecha.",
+ "Crédito":"Deuda de alto rendimiento contra Treasuries de duración parecida. Si el crédito riesgoso aguanta, nadie está pidiendo la cuenta.",
+ "Tasas largas":"Dónde está el bono a 10 años dentro de su rango del año. Arriba del rango = viento de frente para todo lo que vale por su flujo futuro.",
+ "Apetito":"Canasta de pares ofensivo contra defensivo. Mide si la plata va a lo cíclico o se pone el casco."};
+var TERM=null;   // pilares calculados por build_radar.py — fuente unica de verdad
+
 function regimen(){
   var spy=get("^GSPC")||get("SPY"),rsp=get("RSP"),iwm=get("IWM"),vix=get("^VIX"),
       hyg=get("HYG"),lqd=get("LQD"),tnx=get("^TNX"),xly=get("XLY"),xlp=get("XLP"),xle=get("XLE");
+  if(TERM&&TERM.pilares&&TERM.pilares.length){
+    // no recalcular: el motor ya lo hizo. Dos implementaciones de la misma
+    // matematica ya habian divergido una vez y mostraban numeros distintos.
+    var PP=TERM.pilares.map(function(p){
+      var col=p.score>=58?"up":p.score<42?"dn":"neu";
+      return [p.t,p.sub,p.val,col,GLOSA[p.t]||""];
+    });
+    pintarTermometro(TERM.score,TERM.etiqueta,PP.map(function(p,i){
+      return [p[0],p[1],p[2],p[3],p[4],TERM.pilares[i].score]}));
+    return TERM.score;
+  }
   var P=[],sc=[];
   // 1 tendencia
   var t=spy.v200, s1=Math.max(0,Math.min(100,50+t*4.5));
@@ -545,24 +583,25 @@ function regimen(){
   else if(tot>=28){lab="A LA DEFENSIVA";col="var(--hot)"}
   else{lab="RIESGO APAGADO";col="var(--dn)"}
 
-  document.getElementById("rgNum").textContent=tot;
-  document.getElementById("rgNum").style.color=col;
-  document.getElementById("rgLab").textContent=lab;
-  document.getElementById("rgLab").style.color=col;
-  document.getElementById("rgBar").style.width=tot+"%";
-  document.getElementById("rgBar").style.background=col;
-  document.getElementById("pillars").innerHTML=P.map(function(p){
-    return '<div class="pil"><div class="t">'+p[0]+'</div><div class="v '+p[3]+'">'+p[2]+
-      '</div><div class="d" style="color:var(--tx3);font-size:10.5px;margin-bottom:4px">'+p[1]+'</div><div class="d">'+p[4]+'</div></div>';
-  }).join("");
+  pintarTermometro(tot,lab,P.map(function(p,i){return [p[0],p[1],p[2],p[3],p[4],Math.round(sc[i])]}));
 
   var alertas=[];
   if(vix.px<15)alertas.push("el VIX en "+vix.px.toFixed(2)+" (percentil "+vix.rng.toFixed(0)+" del año) es <b>complacencia</b>, y la complacencia no avisa antes de romperse");
   if(tnx.rng>85)alertas.push("la tasa a 10 años en "+tnx.px.toFixed(2)+"% está en el <b>tope de su rango anual</b> pese a que el mercado ya descartó nuevas alzas — eso es empinamiento de curva por miedo inflacionario, no por crecimiento");
   var smh=get("SMH"); if(smh&&smh.v50<0)alertas.push("<b>SMH perdió su media de 50</b>: el líder indiscutido del año ("+f(smh.ytd,1)+"% en 2026) se quebró en el corto plazo — es la grieta más importante de vigilar");
 
+  // el texto se CUENTA, no se afirma: antes decía "cinco de los seis pilares"
+  // y "lo más sano es la amplitud" fijos en el código, sin mirar los datos.
+  var SC=(TERM&&TERM.pilares&&TERM.pilares.length)?TERM.pilares.map(function(p){return [p.t,p.score]})
+            :P.map(function(p,i){return [p[0],Math.round(sc[i])]});
+  var arriba=SC.filter(function(p){return p[1]>=58}),abajo=SC.filter(function(p){return p[1]<42});
+  var ord=SC.slice().sort(function(a,b){return b[1]-a[1]});
+  var num=["cero","uno","dos","tres","cuatro","cinco","seis","siete"];
   document.getElementById("rgTxt").innerHTML=
-    "<b>Lectura:</b> "+(tot>=58?"cinco de los seis pilares apuntan a riesgo encendido, y lo más sano de todo es la amplitud — el S&P equiponderado (RSP) rinde "+f(rsp.ytd,1)+"% contra "+f(spy.ytd,1)+"% del índice normal, y las small caps (IWM) van "+f(iwm.ytd,1)+"%. Cuando la tropa completa sube y no solo las siete magníficas, el rally tiene piso.":"los pilares están mezclados: no hay señal limpia en ninguna dirección.")+
+    "<b>Lectura:</b> "+num[arriba.length]+" de los "+num[P.length]+" pilares apuntan a riesgo encendido"+
+    (abajo.length?" y "+num[abajo.length]+(abajo.length===1?" está":" están")+" en rojo":"")+". "+
+    "El más fuerte es <b>"+ord[0][0].toLowerCase()+"</b> ("+ord[0][1]+"/100) y el más débil <b>"+
+    ord[ord.length-1][0].toLowerCase()+"</b> ("+ord[ord.length-1][1]+"/100)."+
     (alertas.length?"<br><br><b>Las banderas amarillas:</b> "+alertas.join("; ")+".":"");
   return tot;
 }
@@ -584,70 +623,48 @@ function score(r){
 function renderPicks(){
   var univ=D.filter(function(r){
     return ["MAC","CL"].indexOf(grp(r))<0 && r.v200!=null && r.v50!=null && r.m1!=null && r.vol!=null && !r.rezago;});
-  var rank=univ.slice().sort(function(a,b){return score(b)-score(a)});
-  var worst=univ.slice().sort(function(a,b){return score(a)-score(b)});
+  // el puntaje viene calculado por build_radar.py; score() queda solo de respaldo
+  var conP=univ.filter(function(r){return r.puntaje!=null});
+  var rank,worst;
+  if(conP.length>=8){
+    rank=conP.slice().sort(function(a,b){return b.puntaje-a.puntaje});
+    // el "de qué me alejaría" sale de los que NO pasan el gate de tendencia
+    var fuera=univ.filter(function(r){return r.puntaje==null&&r.v200!=null});
+    worst=(fuera.length?fuera:conP.slice().reverse()).slice().sort(function(a,b){
+      return (a.v200+a.m1*.5)-(b.v200+b.m1*.5)});
+  }else{
+    rank=univ.slice().sort(function(a,b){return score(b)-score(a)});
+    worst=univ.slice().sort(function(a,b){return score(a)-score(b)});
+  }
   var L=rank[0];
   var T=rank.filter(function(r){return r!==L&&r.m1>4})[0]||rank[1];
   var S=worst[0];
-  var razones={
-    "RSP":["<b>Es la jugada directa a lo único que está funcionando de verdad este año: la amplitud.</b> El S&P equiponderado rinde "+f(L.ytd,1)+"% contra +14,5% del S&P normal. Le está ganando al índice que todo el mundo compra, y le gana porque sube la tropa completa y no siete acciones.",
-      "<b>La volatilidad más baja de todo el radar de renta variable: "+L.vol.toFixed(1)+"%.</b> Rinde más que el S&P con dos tercios de su sobresalto. Esa relación es rarísima y no suele durar.",
-      "Estructura impecable: en el <b>máximo del año</b> (100% del rango), "+f(L.v200,1)+"% sobre su media de 200 y "+f(L.v50,1)+"% sobre la de 50 — fuerte pero <b>sin estar extendido</b>, que es justo lo que descalifica a energía hoy.",
-      "<b>Y protege del riesgo principal del índice:</b> el S&P normal depende de que Nvidia y Apple no se caigan (juntas pesan ~15%). Acá cada acción pesa lo mismo. Si el liderazgo de semiconductores se sigue quebrando — SMH ya perdió su media de 50 — esto lo siente mucho menos."],
-    "GDX":["<b>Subió +"+Math.abs(S.m1).toFixed(0)+"% en un mes y aun así es lo peor puntuado del radar.</b> Ahí está la trampa: la fuerza reciente no arregla una estructura rota.",
-      "Sigue con <b>cruce bajista</b>, "+f(S.fromHi,1)+"% bajo su máximo, y con una volatilidad de <b>"+S.vol.toFixed(0)+"%</b> — la más alta de todo el tablero, casi cinco veces la del S&P equiponderado.",
-      "Está <b>"+f(S.v50,1)+"% sobre su media de 50</b>. Entrar acá no es comprar una tendencia: es comprar el techo de un rebote vertical, en el activo que más rápido se devuelve cuando el rebote se agota.",
-      "El oro que hay detrás cuenta la misma historia: GLD subió 10% en el mes pero sigue 19% bajo su máximo y con cruce bajista. <b>El rebote es real; la tendencia todavía no existe.</b> Y XTB justo reporta que el minorista está volviendo al oro — que es históricamente el último en llegar."],
-    "EWJ":["Japón lleva <b>"+f(L.ytd,1)+"%</b> en el año con "+f(L.m1,1)+"% solo en el último mes, y cotiza prácticamente en el máximo de 52 semanas.",
-      "Estructura completa: cruce alcista, "+f(L.v200,1)+"% sobre la media de 200 y "+f(L.v50,1)+"% sobre la de 50 — con impulso pero sin la extensión que descalifica a energía.",
-      "<b>El punto ciego a vigilar es el yen.</b> Con el dólar/yen en 159 buena parte del retorno viene del tipo de cambio, no de las acciones. Si el Banco de Japón se mueve, ese viento a favor se puede dar vuelta rápido.",
-      "Es además una forma de estar fuera de EEUU sin irte a emergentes, que este año vienen flojos (China −8,5%, India −7,9%)."],
-    "EZU":["La Zona Euro está en <b>máximo del año</b> (100% del rango) con "+f(L.ytd,1)+"% acumulado y "+f(L.m1,1)+"% en el mes.",
-      "Estructura sólida: "+f(L.v200,1)+"% sobre la media de 200 con cruce alcista, y "+f(L.v50,1)+"% sobre la de 50.",
-      "El software europeo está sosteniendo los índices del continente cerca de máximos — no es un rally de un solo sector.",
-      "<b>Y cotiza mucho más barato que EEUU.</b> Estás comprando la misma tendencia alcista global sin pagar los múltiplos del Nasdaq."],
-    "XBI":["Biotecnología lleva <b>"+f(L.ytd,1)+"%</b> en el año y <b>"+f(L.y1,1)+"% en doce meses</b> — de los retornos más altos del radar.",
-      "Estructura fuerte: "+f(L.v200,1)+"% sobre la media de 200 con cruce alcista, "+f(L.m3,1)+"% en el trimestre.",
-      "Es el sector que más se beneficia de que la Fed deje de subir: son empresas que queman caja hoy para ganar en diez años más, y el crédito caro las castiga más que a nadie.",
-      "<b>Ojo con la volatilidad ("+L.vol.toFixed(0)+"%):</b> es casi el doble que la del S&P. Sube fuerte y corrige fuerte."],
-    "XLF":["Rezagado del año pero en máximos: rinde <b>"+f(L.ytd,1)+"%</b> contra <b>+14,5%</b> del S&P, y aun así cotiza en el <b>99% de su rango anual</b>. Fuerza sin sobre-extensión: la combinación más difícil de encontrar.",
-      "<b>La curva se está empinando a su favor.</b> El mercado ya descartó el alza de la Fed (30,6% de probabilidad para septiembre, contra 50% hace un mes) pero la tasa a 10 años sigue clavada en el techo del año. Prestar largo y fondearse corto se vuelve más rentable — es el negocio de un banco.",
-      "<b>La volatilidad más baja de todo el radar cíclico ("+L.vol.toFixed(1)+"%).</b> Sube igual que el resto pero con la mitad del sobresalto.",
-      "Trimestre de <b>"+f(L.m3,1)+"%</b> con cruce alcista intacto y "+f(L.v200,1)+"% sobre su media de 200."],
-    "IGV":["Cruce alcista <b>a punto de gatillarse</b>: la media de 50 está a menos de un 0,3% de cruzar la de 200 por arriba. El disparador clásico está justo ahí.",
-      "<b>+"+L.m1.toFixed(1)+"% en el último mes</b> y un trimestre de "+f(T.m3,1)+"%, después de un año entero rezagado ("+f(T.ytd,1)+"% en 2026).",
-      "La noticia acompaña: el software europeo está sosteniendo a los índices cerca de máximos históricos."],
-    "IWM":["<b>Máximo del año, literal:</b> cotiza en el 100% de su rango de 52 semanas.",
-      "Es <b>la prueba de la amplitud</b>: "+f(L.ytd,1)+"% en el año contra +14,5% del S&P. Las chicas le están ganando a las gigantes, y eso solo pasa en mercados sanos.",
-      "El dato de ventas minoristas flojo le juega a favor: menos presión de alzas de tasa es exactamente lo que necesita una small cap endeudada."],
-    "ITA":["<b>Máximo histórico</b> (100% del rango anual), con "+f(L.m1,1)+"% en el mes.",
-      "El driver es estructural, no de humor: conflicto en Ormuz, rearme global y capex de defensa que no depende del ciclo económico.",
-      "Nvidia acaba de declarar US$21.000 millones en SpaceX — el capex de IA se está derramando al espacio y la defensa."],
-    "XLE":["Líder absoluto del año: <b>"+f(L.ytd,1)+"%</b>, con "+f(L.w1,1)+"% solo en la última semana.",
-      "Brent en US$88,5 y la reserva estratégica de EEUU en niveles críticos — menos colchón para amortiguar cualquier shock.",
-      "<b>Cuidado:</b> está "+f(L.v50,1)+"% sobre su media de 50. Entrar acá es comprar extensión, no entrada."],
-    "XLI":["En <b>máximo del año</b> con "+f(L.ytd,1)+"% acumulado y estructura alcista completa.",
-      "Se lo lleva el capex de infraestructura de IA: capacidad eléctrica, construcción de centros de datos y defensa."],
-    "TLT":["<b>En el piso de su rango de 52 semanas ("+S.rng.toFixed(1)+"%).</b> No es un piso: es una caída sin freno.",
-      "Cruce bajista activo, "+f(S.v200,1)+"% bajo su media de 200 y "+f(S.ytd,1)+"% en el año.",
-      "<b>El motivo importa:</b> la tasa a 10 años sube aunque el mercado ya descartó el alza de la Fed. Eso es empinamiento por prima inflacionaria del petróleo, no por crecimiento — el peor escenario para un bono largo.",
-      "LarrainVial va en la misma dirección: se corrió a <b>duración corta y calidad</b>, con más UF por el riesgo inflacionario."],
-    "BTC-USD":["<b>"+f(S.ytd,1)+"% en el año</b> y "+f(S.fromHi,1)+"% bajo su máximo — el peor activo de todo el radar.",
-      "Cruce bajista, bajo ambas medias, y en el 11% inferior de su rango anual.",
-      "Es la señal más clara de que <b>esto no es un mercado de liquidez fácil</b>: con acciones en máximos, el activo más especulativo está en el subsuelo. La plata está siendo selectiva."],
-    "SLV":["<b>"+f(S.fromHi,1)+"% desde el máximo</b> y "+f(S.m3,1)+"% en el trimestre: el desplome más violento del radar.",
-      "Cruce bajista y "+f(S.v200,1)+"% bajo su media de 200.",
-      "El rebote de "+f(S.m1,1)+"% del último mes es contratendencia — no hay estructura que lo respalde todavía."],
-    "MCHI":["<b>"+f(S.ytd,1)+"% en el año</b>, en el 27% inferior de su rango y bajo ambas medias.",
-      "LarrainVial <b>redujo Asia</b> justamente por esto y movió esa ficha a Latinoamérica."],
-    "URA":["Rebote fuerte de "+f(S.m1,1)+"% en el mes con el uranio en máximos desde febrero, pero <b>sigue "+f(S.fromHi,1)+"% bajo su máximo</b> y bajo la media de 200.",
-      "Rebote, no tendencia: mientras no recupere la media de 200 y cruce, es un movimiento sin piso."]
-  };
+  // Los argumentos se DERIVAN de los datos. Antes eran prosa fija por ticker y
+  // quedaban obsoletos apenas cambiaba el ranking: al corregir el motor, GDX pasó
+  // de "lo peor del radar" a primer lugar y su texto seguía diciendo lo contrario.
+  var mom=function(r){return (12*r.m1+4*r.m3+2*r.m6+1*r.y1)/4};
+  var razones={};
   var gen=function(r,tipo){
-    return razones[r.sym]||[
-      (tipo==="corto"?"Estructura rota: ":"Estructura sólida: ")+f(r.v200,1)+"% respecto de su media de 200, con cruce "+(r.cross==="golden"?"alcista":"bajista")+".",
-      "Momentum del último mes: <b>"+f(r.m1,1)+"%</b>. En el año acumula "+f(r.ytd,1)+"%.",
-      "Cotiza en el "+r.rng.toFixed(0)+"% de su rango de 52 semanas, con volatilidad de "+r.vol.toFixed(1)+"%."];
+    var L=[],m=META[r.sym]||[r.sym,""];
+    if(tipo==="corto"){
+      L.push("<b>No pasa el filtro de tendencia.</b> "+(r.v200<=0
+        ? "Cotiza "+f(r.v200,1)+"% <b>bajo</b> su media de 200 sesiones."
+        : "Su retorno a doce meses es "+f(r.y1,1)+"%.")+" El motor exige estar sobre la media de 200 <i>y</i> con retorno anual positivo — si falla cualquiera de las dos, queda fuera del ranking, no compite.");
+      L.push("Momentum: <b>"+f(r.m1,1)+"%</b> en el mes, "+f(r.m3,1)+"% en el trimestre y "+f(r.ytd,1)+"% en el año.");
+      L.push("Está "+f(r.fromHi,1)+"% bajo su máximo de 52 semanas, en el "+r.rng.toFixed(0)+"% inferior de su rango"+
+        (r.cross==="death"?", con cruce bajista activo":"")+".");
+      if(r.m1>5)L.push("<b>Ojo con el rebote:</b> subió "+f(r.m1,1)+"% en el mes, pero sin estructura que lo respalde eso es un rebote, no un cambio de tendencia.");
+    }else{
+      L.push("<b>Momentum multi-horizonte de "+mom(r).toFixed(0)+"</b>, el "+(tipo==="lider"?"más alto":"segundo más alto")+
+        " del radar: "+f(r.m1,1)+"% en el mes, "+f(r.m3,1)+"% en el trimestre, "+f(r.m6,1)+"% en el semestre y "+f(r.y1,1)+"% en doce meses.");
+      L.push("Pasa el filtro de tendencia: <b>"+f(r.v200,1)+"% sobre su media de 200</b> y retorno anual positivo. "+
+        (r.cross==="golden"?"El cruce 50/200 está en alcista.":"<b>El cruce 50/200 todavía está en bajista</b> — la fuerza es reciente y la estructura de fondo aún no la confirma."));
+      L.push("Cotiza en el "+r.rng.toFixed(0)+"% de su rango de 52 semanas"+
+        (r.fromHi<-8?", todavía "+f(r.fromHi,1)+"% bajo su máximo":"")+".");
+      if(r.vol>28)L.push("<b>Volatilidad de "+r.vol.toFixed(0)+"%</b> — de las más altas del radar. Por eso el peso sugerido es chico: el tamaño de la posición es lo que controla el riesgo, no el puntaje.");
+      else if(r.vol<15)L.push("Volatilidad de solo "+r.vol.toFixed(1)+"%, de las más bajas del radar: sube parecido al resto con bastante menos sobresalto.");
+    }
+    return L;
   };
   var box=function(r,klass,hd,badge,tipo){
     var m=META[r.sym]||[r.sym,""];
@@ -658,10 +675,10 @@ function renderPicks(){
       '<div class="pk-why"><ul><li>'+gen(r,tipo).join('</li><li>')+'</li></ul></div>'+
       '<div class="lvl"><div><span>Invalidación</span>'+r.ma50.toLocaleString("es-CL",{maximumFractionDigits:2})+'</div>'+
       '<div><span>Distancia</span><b class="'+cls(r.v50)+'">'+f(r.v50,1)+'%</b></div>'+
-      '<div><span>Volatilidad</span>'+r.vol.toFixed(1)+'%</div></div></div></div>';
+      '<div><span>Volatilidad</span>'+r.vol.toFixed(1)+'%</div>'+(r.peso?'<div><span>Peso sug.</span>'+r.peso+'%</div>':'')+'</div></div></div>';
   };
   document.getElementById("picks").innerHTML=
-    box(L,"pk-l","▲ El largo más limpio","posición principal","largo")+
+    box(L,"pk-l","▲ Primero del ranking","posición principal","lider")+
     box(T,"pk-t","◆ El táctico","satélite / plazo corto","largo")+
     box(S,"pk-s","▼ De lo que me alejaría","evitar o cubrir","corto");
 
@@ -1117,6 +1134,7 @@ async function cargarDatos(){
     ALERTAS=j.alertas||[];
     AGENDA=j.calendario||[];
     LVLIST=j.lv_sobreponderar||[];
+    TERM=j.termometro||null;
     j.instrumentos.forEach(function(r){if(r.nombre&&!META[r.sym])META[r.sym]=[r.nombre,r.grupo]});
     var fm=j.fecha_mercado;
     document.getElementById("asof").textContent="cierre "+fm;

@@ -208,6 +208,19 @@ footer b{color:var(--tx2)}
     <div class="pillars" id="pillars"></div>
   </div>
   <div class="note" id="rgTxt"></div>
+  <div id="serieBox" style="display:none;margin-top:16px;padding-top:15px;border-top:1px solid var(--line)">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px">
+      <div style="font-size:10.5px;letter-spacing:.9px;text-transform:uppercase;color:var(--tx3);font-weight:700">Cómo viene el termómetro</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--tx3)" id="serieMeta"></div>
+    </div>
+    <svg id="serie" viewBox="0 0 900 120" preserveAspectRatio="none" style="width:100%;height:110px;display:block"></svg>
+    <div class="note" id="serieTxt" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div id="alertasBox" style="display:none">
+  <h2>Lo que cambió desde la última corrida</h2>
+  <div class="news" id="alertas"></div>
 </div>
 
 <!-- ============ PICK ============ -->
@@ -220,6 +233,23 @@ footer b{color:var(--tx2)}
   posición en el rango de 52 semanas, y volatilidad anualizada de 20 días. Después descuenta lo que ya está
   sobre-extendido y premia lo que está fuerte pero todavía rezagado en el año. El nivel de invalidación es
   siempre la media de 50 sesiones: si cierra abajo, la tesis de corto plazo se cae.
+</div>
+
+<!-- ============ AGENDA ============ -->
+<div id="agendaBox" style="display:none">
+  <h2>Agenda — lo que puede mover el tablero</h2>
+  <div class="tblwrap">
+    <table style="min-width:640px"><thead><tr>
+      <th class="l">Cuándo</th><th class="l">Dato</th><th class="l">Dónde</th>
+      <th class="l">A qué le pega</th><th>Peso</th>
+    </tr></thead><tbody id="agenda"></tbody></table>
+  </div>
+  <div class="note">
+    Las fechas de bancos centrales son las oficiales publicadas por la Fed y el Banco Central de Chile.
+    Las marcadas <b>aprox.</b> siguen la regla habitual de publicación (empleo = primer viernes del mes,
+    IPC alrededor del 12, ventas minoristas alrededor del 15) y pueden correrse uno o dos días.
+    Sirven para saber qué se viene, no para agendar al minuto.
+  </div>
 </div>
 
 <!-- ============ NOTICIAS CURADAS ============ -->
@@ -291,13 +321,13 @@ footer b{color:var(--tx2)}
 <div class="grid g2">
   <div class="card">
     <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--tx3);font-weight:700;margin-bottom:11px">Cartera recomendada · LarrainVial Research</div>
-    <div class="note" style="margin:0 0 12px">Doce papeles con recomendación de <b>sobreponderar</b>:</div>
+    <div id="lvTabla"><div class="note" style="margin:0 0 12px">Papeles con recomendación de <b>sobreponderar</b>:</div>
     <div class="chips" style="margin:0">
       <span class="chip">Engie Energía</span><span class="chip">Aguas Andinas</span><span class="chip">COPEC</span>
       <span class="chip">SQM-B</span><span class="chip">Banco de Chile</span><span class="chip">Santander</span>
       <span class="chip">Itaú</span><span class="chip">Ripley</span><span class="chip">SMU</span>
       <span class="chip">Cencosud Shopping</span><span class="chip">Mallplaza</span><span class="chip">Parque Arauco</span>
-    </div>
+    </div></div>
     <div class="note">
       El sesgo está clarísimo: <b>malls, bancos y utilities</b>. Es una apuesta directa a que las tasas locales
       siguen bajando — los tres sectores son los que más se benefician. En agosto LarrainVial además
@@ -452,7 +482,8 @@ var META={
 };
 var GRUPOS=[["IDX","Índices y núcleo"],["SEC","Sectores de EEUU"],["TEM","Temáticos"],
   ["REG","Regiones y países"],["RF","Renta fija y crédito"],["MAT","Materias primas"],
-  ["MAC","Macro y termómetros"]];
+  ["MAC","Macro y termómetros"],["CL","Chile · bolsa local en pesos"]];
+var grp=function(r){return r.grupo||(META[r.sym]||["","MAC"])[1]};
 var LIVE=null, D=SNAP.slice();
 var f=function(n,d){return n==null||isNaN(n)?"–":(n>0?"+":"")+n.toFixed(d===undefined?2:d)};
 var cls=function(n){return n==null||isNaN(n)?"neu":n>0.05?"up":n<-0.05?"dn":"neu"};
@@ -460,12 +491,15 @@ var get=function(s){for(var i=0;i<D.length;i++)if(D[i].sym===s)return D[i];retur
 
 /* ══════════════════ VEREDICTOS ══════════════════ */
 function vLargo(r){
+  if(r.v200==null)return['<span class="tag t-pb">SIN HISTORIA</span>','la fuente no entrega serie para calcularlo'];
   if(r.v200>0&&r.cross==="golden")return['<span class="tag t-lg">ALCISTA</span>','sobre su media de 200 con cruce alcista'];
   if(r.v200>0)return['<span class="tag t-rb">EN TRANSICIÓN</span>','sobre la media de 200 pero sin cruce que lo confirme'];
   if(r.v200<0&&r.cross==="death")return['<span class="tag t-ct">BAJISTA</span>','bajo su media de 200 con cruce bajista'];
   return['<span class="tag t-rb">DEBILITADO</span>','perdió la media de 200'];
 }
 function vCorto(r){
+  if(r.v50==null||r.m1==null)return['<span class="tag t-pb">SIN DATO</span>','sin serie reciente confiable'];
+  if(r.rezago)return['<span class="tag t-rb">DATO CONGELADO</span>','la fuente no actualiza las barras diarias'];
   var f50=r.v50>0, mom=r.m1>0;
   if(f50&&mom)return['<span class="tag t-lg">CON FUERZA</span>','arriba de la media de 50 y subiendo'];
   if(f50&&!mom)return['<span class="tag t-rb">PERDIENDO IMPULSO</span>','aguanta la media de 50 pero el mes viene flojo'];
@@ -548,7 +582,8 @@ function score(r){
   return s;
 }
 function renderPicks(){
-  var univ=D.filter(function(r){return ["^VIX","^TNX","^GSPC","DX-Y.NYB","CLP=X"].indexOf(r.sym)<0});
+  var univ=D.filter(function(r){
+    return ["MAC","CL"].indexOf(grp(r))<0 && r.v200!=null && r.v50!=null && r.m1!=null && r.vol!=null && !r.rezago;});
   var rank=univ.slice().sort(function(a,b){return score(b)-score(a)});
   var worst=univ.slice().sort(function(a,b){return score(a)-score(b)});
   var L=rank[0];
@@ -650,14 +685,13 @@ function renderTabla(){
     list.forEach(function(r){
       var m=META[r.sym]||[r.sym,""],L=vLargo(r),C=vCorto(r);
       var esPct=["^VIX","^TNX"].indexOf(r.sym)>=0;
-      h+='<tr><td class="l"><div class="sym">'+r.sym+'</div><div class="nm">'+m[0]+'</div></td>'+
+      var pct=function(v,d){return v==null?'<td class="neu">–</td>':'<td class="'+cls(v)+'">'+f(v,d)+'%</td>'};
+      h+='<tr><td class="l"><div class="sym">'+r.sym.replace(".SN","")+'</div><div class="nm">'+m[0]+'</div></td>'+
         '<td>'+r.px.toLocaleString("es-CL",{maximumFractionDigits:2})+(esPct&&r.sym==="^TNX"?"%":"")+'</td>'+
-        ['d1','w1','m1','m3','ytd','y1'].map(function(k){
-          return '<td class="'+cls(r[k])+'">'+f(r[k],1)+'%</td>'}).join("")+
-        '<td class="'+cls(r.v50)+'">'+f(r.v50,1)+'%</td>'+
-        '<td class="'+cls(r.v200)+'">'+f(r.v200,1)+'%</td>'+
-        '<td class="'+(r.rng>80?"up":r.rng<25?"dn":"neu")+'">'+r.rng.toFixed(0)+'%</td>'+
-        '<td class="neu">'+r.vol.toFixed(1)+'%</td>'+
+        ['d1','w1','m1','m3','ytd','y1'].map(function(k){return pct(r[k],1)}).join("")+
+        pct(r.v50,1)+pct(r.v200,1)+
+        '<td class="'+(r.rng==null?"neu":r.rng>80?"up":r.rng<25?"dn":"neu")+'">'+(r.rng==null?"–":r.rng.toFixed(0)+"%")+'</td>'+
+        '<td class="neu">'+(r.vol==null?"–":r.vol.toFixed(1)+"%")+'</td>'+
         '<td class="l">'+L[0]+'</td><td class="l">'+C[0]+'</td></tr>';
     });
   };
@@ -668,7 +702,7 @@ function renderTabla(){
     pinta(s);
   }else{
     GRUPOS.forEach(function(g){
-      var list=D.filter(function(r){return (META[r.sym]||["",""])[1]===g[0]});
+      var list=D.filter(function(r){return grp(r)===g[0]});
       if(!list.length)return;
       h+='<tr class="grp"><td colspan="14">'+g[1]+'</td></tr>';
       pinta(list);
@@ -683,7 +717,8 @@ document.querySelectorAll("#tbl th[data-k]").forEach(function(th){
 /* ══════════════════ QUADRANT ══════════════════ */
 function renderQuad(){
   var q=document.getElementById("quad");
-  var sel=D.filter(function(r){var g=(META[r.sym]||["",""])[1];return ["SEC","TEM","IDX","REG","MAT"].indexOf(g)>=0&&r.sym!=="^GSPC"});
+  var sel=D.filter(function(r){return ["SEC","TEM","IDX","REG","MAT"].indexOf(grp(r))>=0
+    &&r.sym!=="^GSPC"&&r.v200!=null&&r.m1!=null});
   var xs=sel.map(function(r){return r.v200}),ys=sel.map(function(r){return r.m1});
   var xM=Math.max(Math.abs(Math.min.apply(null,xs)),Math.max.apply(null,xs))*1.15;
   var yM=Math.max(Math.abs(Math.min.apply(null,ys)),Math.max.apply(null,ys))*1.2;
@@ -953,7 +988,7 @@ function renderBuzz(totalTit){
   var filas=arr.slice(0,14).map(function(o){
     var r=get(o.sym),m=META[o.sym]||[o.sym,""];
     var w=Math.max(6,(o.n/max)*100);
-    var mv=r?r.m1:null;
+    var mv=(r&&r.m1!=null)?r.m1:null;
     return '<div class="bz" title="'+o.tit.slice(0,4).join(" · ").replace(/"/g,"'")+'">'+
       '<div class="bz-s">'+o.sym+'</div>'+
       '<div class="bz-n">'+m[0]+'</div>'+
@@ -978,11 +1013,132 @@ function renderBuzz(totalTit){
   el.innerHTML=filas;
 }
 
+/* ══════════════════ HISTORICO · ALERTAS · AGENDA · CHILE LOCAL ══════════════════ */
+var SERIE=[],ALERTAS=[],AGENDA=[],LVLIST=[];
+
+function renderSerie(){
+  if(SERIE.length<2){document.getElementById("serieBox").style.display="none";return}
+  document.getElementById("serieBox").style.display="block";
+  var W=900,H=120,pad=8;
+  var vs=SERIE.map(function(p){return p.s});
+  var lo=Math.min.apply(null,vs.concat([35])),hi=Math.max.apply(null,vs.concat([75]));
+  var x=function(i){return pad+(i/(SERIE.length-1))*(W-pad*2)};
+  var y=function(v){return H-pad-((v-lo)/Math.max(1,hi-lo))*(H-pad*2)};
+  var d=SERIE.map(function(p,i){return (i?"L":"M")+x(i).toFixed(1)+" "+y(p.s).toFixed(1)}).join(" ");
+  var area=d+" L"+x(SERIE.length-1).toFixed(1)+" "+(H-pad)+" L"+pad+" "+(H-pad)+" Z";
+  var ult=SERIE[SERIE.length-1].s;
+  var col=ult>=58?"var(--up)":ult>=42?"var(--warn)":"var(--dn)";
+  var g="";
+  [50,70].forEach(function(l){if(l>=lo&&l<=hi)g+='<line x1="'+pad+'" x2="'+(W-pad)+'" y1="'+y(l).toFixed(1)+'" y2="'+y(l).toFixed(1)+'" stroke="var(--line)" stroke-dasharray="4 4"/>'+
+    '<text x="'+(W-pad)+'" y="'+(y(l)-4).toFixed(1)+'" text-anchor="end" fill="var(--tx3)" font-size="9">'+l+'</text>'});
+  document.getElementById("serie").innerHTML=g+
+    '<path d="'+area+'" fill="'+col+'" opacity=".10"/>'+
+    '<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round"/>'+
+    '<circle cx="'+x(SERIE.length-1).toFixed(1)+'" cy="'+y(ult).toFixed(1)+'" r="3.5" fill="'+col+'"/>';
+  document.getElementById("serieMeta").textContent=SERIE.length+" día"+(SERIE.length>1?"s":"")+" · "+
+    SERIE[0].f+" → "+SERIE[SERIE.length-1].f;
+  var t="";
+  if(SERIE.length>=5){
+    var prev=SERIE[Math.max(0,SERIE.length-6)].s,dif=ult-prev;
+    t="En los últimos "+Math.min(5,SERIE.length-1)+" días el termómetro "+
+      (dif>3?"<b>subió "+dif.toFixed(0)+" puntos</b> — el mercado está soltando riesgo hacia arriba.":
+       dif<-3?"<b>cayó "+Math.abs(dif).toFixed(0)+" puntos</b> — se está poniendo defensivo, conviene mirarlo de cerca.":
+       "se movió apenas "+dif.toFixed(0)+" puntos: régimen estable.");
+  }else{
+    t="Recién empieza a acumularse la serie. Con una semana de corridas vas a poder ver la <b>dirección</b>, "+
+      "que informa mucho más que el nivel: un 60 subiendo desde 45 no significa lo mismo que un 60 cayendo desde 75.";
+  }
+  document.getElementById("serieTxt").innerHTML=t;
+}
+
+function renderAlertas(){
+  var box=document.getElementById("alertasBox");
+  if(!ALERTAS.length){box.style.display="none";return}
+  box.style.display="block";
+  document.getElementById("alertas").innerHTML=ALERTAS.map(function(a){
+    var k={1:["up","▲"],2:["wr","⚠"],3:["dn","▼"]}[a.n]||["nu","◆"];
+    return '<div class="ni a-'+k[0]+'"><div class="ni-h"><div class="ni-t">'+a.t+'</div></div>'+
+      '<div class="ni-b">'+a.d+'</div></div>';
+  }).join("");
+}
+
+function renderAgenda(){
+  if(!AGENDA.length){document.getElementById("agendaBox").style.display="none";return}
+  document.getElementById("agendaBox").style.display="block";
+  document.getElementById("agenda").innerHTML=AGENDA.map(function(e){
+    var c=e.dias===0?"hoy":e.dias===1?"mañana":"en "+e.dias+" días";
+    var urg=e.dias<=2?"up":e.dias<=7?"neu":"neu";
+    var peso="●".repeat(e.peso)+'<span style="color:var(--tx3)">'+"○".repeat(3-e.peso)+'</span>';
+    return '<tr><td class="l"><b class="'+urg+'">'+c+'</b><div class="nm">'+e.f+'</div></td>'+
+      '<td class="l" style="font-family:-apple-system,sans-serif">'+e.t+
+        (e.aprox?' <span style="color:var(--tx3);font-size:10.5px">aprox.</span>':'')+'</td>'+
+      '<td class="l">'+e.reg+'</td>'+
+      '<td class="l">'+(e.toca||[]).map(function(s){return '<span class="chip">'+s+'</span>'}).join(" ")+'</td>'+
+      '<td>'+peso+'</td></tr>';
+  }).join("");
+}
+
+function renderChileLocal(){
+  var cl=D.filter(function(r){return r.grupo==="CL"&&r.sym!=="^IPSA"&&r.ytd!=null});
+  if(!cl.length)return;
+  var ipsa=get("^IPSA");
+  cl.sort(function(a,b){return b.ytd-a.ytd});
+  var enLV=function(s){return LVLIST.indexOf(s)>=0};
+  var rez=cl.filter(function(r){return r.rezago})[0];
+  var filas=cl.map(function(r){
+    return '<div class="bz"><div class="bz-s" style="font-size:11.5px">'+r.sym.replace(".SN","")+'</div>'+
+      '<div class="bz-n">'+r.nombre+(enLV(r.sym)?' <span style="color:var(--acc)">★</span>':'')+'</div>'+
+      '<div class="bz-b"><i style="width:'+Math.min(100,Math.max(4,Math.abs(r.ytd)*2))+'%;background:'+
+        (r.ytd>0?"var(--up)":"var(--dn)")+'"></i><b class="'+cls(r.ytd)+'">'+f(r.ytd,1)+'%</b></div>'+
+      '<div class="bz-m '+cls(r.v200)+'">'+f(r.v200,0)+'%</div></div>';
+  }).join("");
+  document.getElementById("lvTabla").innerHTML=
+    (ipsa?'<div class="kv" style="border-bottom:1px solid var(--line);padding-bottom:9px;margin-bottom:9px">'+
+      '<span>IPSA · nivel actual</span><span class="up">'+ipsa.px.toLocaleString("es-CL")+' pts</span></div>':'')+
+    '<div class="note" style="margin:0 0 10px">Acciones del IPSA ordenadas por retorno del año. '+
+      '<span style="color:var(--acc)">★</span> = sobreponderar según LarrainVial Research. '+
+      'La última columna es qué tan lejos está el precio de su media de 200 sesiones.</div>'+
+    filas+
+    (rez?'<div class="note" style="margin-top:10px;color:var(--warn)">⚠ Yahoo Finance tiene las barras diarias '+
+      'de la Bolsa de Santiago <b>congeladas hace '+rez.rezago+' sesiones</b> — repite el mismo cierre. '+
+      'El precio actual sí es real y los retornos del año cuadran contra la prensa, pero por eso '+
+      '<b>no se muestra variación diaria ni semanal</b> para estos papeles: sería inventar un número.</div>':'');
+}
+
+/* ══════════════════ CARGA DE datos.json ══════════════════ */
+async function cargarDatos(){
+  try{
+    var r=await to(fetch("datos.json?t="+Date.now()),9000);
+    if(!r.ok)throw new Error("sin archivo");
+    var j=await r.json();
+    if(!j.instrumentos||j.instrumentos.length<20)throw new Error("payload corto");
+    D=j.instrumentos;
+    SERIE=j.serie_termometro||[];
+    ALERTAS=j.alertas||[];
+    AGENDA=j.calendario||[];
+    LVLIST=j.lv_sobreponderar||[];
+    j.instrumentos.forEach(function(r){if(r.nombre&&!META[r.sym])META[r.sym]=[r.nombre,r.grupo]});
+    var fm=j.fecha_mercado;
+    document.getElementById("asof").textContent="cierre "+fm;
+    pintarTodo();
+    st("live","datos al cierre "+fm+" · "+D.length+" instrumentos · "+
+      (SERIE.length>1?SERIE.length+" días de histórico":"primer día de histórico"));
+    return true;
+  }catch(e){
+    st("idle","cierre 14-ago (snapshot incluido) · corré build_radar.py para datos frescos");
+    return false;
+  }
+}
+
 /* ══════════════════ INIT ══════════════════ */
-function pintarTodo(){regimen();renderPicks();renderTabla();renderQuad();renderChile()}
+function pintarTodo(){
+  regimen();renderPicks();renderTabla();renderQuad();renderChile();
+  renderSerie();renderAlertas();renderAgenda();renderChileLocal();
+}
 pintarTodo();renderCuradas();
 document.getElementById("btnLive").onclick=live;
 document.getElementById("btnNews").onclick=news;
+cargarDatos();
 </script>
 </body>
 </html>

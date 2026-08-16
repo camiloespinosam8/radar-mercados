@@ -1,0 +1,6 @@
+# nada de esto se publica
+config_local.json
+*.log
+__pycache__/
+*.pyc
+INVESTIGACION_metodologia.md
